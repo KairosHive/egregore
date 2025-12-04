@@ -1,0 +1,3177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Egregore</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    // Inline OrbitControls for reliability
+    THREE.OrbitControls = function(object, domElement) {
+        this.object = object;
+        this.domElement = domElement;
+        this.enabled = true;
+        this.target = new THREE.Vector3();
+        this.enableDamping = false;
+        this.dampingFactor = 0.05;
+        this.enableZoom = true;
+        this.zoomSpeed = 1.0;
+        this.enableRotate = true;
+        this.rotateSpeed = 1.0;
+        this.autoRotate = false;
+        this.autoRotateSpeed = 2.0;
+        
+        var scope = this;
+        var spherical = new THREE.Spherical();
+        var sphericalDelta = new THREE.Spherical();
+        var scale = 1;
+        var rotateStart = new THREE.Vector2();
+        var rotateEnd = new THREE.Vector2();
+        var rotateDelta = new THREE.Vector2();
+        var STATE = { NONE: -1, ROTATE: 0, DOLLY: 1 };
+        var state = STATE.NONE;
+        
+        this.update = function() {
+            var offset = new THREE.Vector3();
+            var position = scope.object.position;
+            offset.copy(position).sub(scope.target);
+            spherical.setFromVector3(offset);
+            if (scope.autoRotate && state === STATE.NONE) {
+                spherical.theta += 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
+            }
+            spherical.theta += sphericalDelta.theta;
+            spherical.phi += sphericalDelta.phi;
+            spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+            spherical.radius *= scale;
+            spherical.radius = Math.max(0.5, Math.min(20, spherical.radius));
+            offset.setFromSpherical(spherical);
+            position.copy(scope.target).add(offset);
+            scope.object.lookAt(scope.target);
+            if (scope.enableDamping) {
+                sphericalDelta.theta *= (1 - scope.dampingFactor);
+                sphericalDelta.phi *= (1 - scope.dampingFactor);
+            } else {
+                sphericalDelta.set(0, 0, 0);
+            }
+            scale = 1;
+            return false;
+        };
+        
+        function onMouseDown(event) {
+            if (!scope.enabled) return;
+            event.preventDefault();
+            if (event.button === 0) {
+                state = STATE.ROTATE;
+                rotateStart.set(event.clientX, event.clientY);
+            }
+            document.addEventListener('mousemove', onMouseMove, false);
+            document.addEventListener('mouseup', onMouseUp, false);
+        }
+        
+        function onMouseMove(event) {
+            if (!scope.enabled) return;
+            event.preventDefault();
+            if (state === STATE.ROTATE) {
+                rotateEnd.set(event.clientX, event.clientY);
+                rotateDelta.subVectors(rotateEnd, rotateStart);
+                var element = scope.domElement;
+                sphericalDelta.theta -= 2 * Math.PI * rotateDelta.x / element.clientWidth * scope.rotateSpeed;
+                sphericalDelta.phi -= 2 * Math.PI * rotateDelta.y / element.clientHeight * scope.rotateSpeed;
+                rotateStart.copy(rotateEnd);
+            }
+        }
+        
+        function onMouseUp() {
+            if (!scope.enabled) return;
+            document.removeEventListener('mousemove', onMouseMove, false);
+            document.removeEventListener('mouseup', onMouseUp, false);
+            state = STATE.NONE;
+        }
+        
+        function onWheel(event) {
+            if (!scope.enabled || !scope.enableZoom) return;
+            event.preventDefault();
+            if (event.deltaY < 0) scale /= Math.pow(0.95, scope.zoomSpeed);
+            else if (event.deltaY > 0) scale *= Math.pow(0.95, scope.zoomSpeed);
+        }
+        
+        this.domElement.addEventListener('mousedown', onMouseDown, false);
+        this.domElement.addEventListener('wheel', onWheel, { passive: false });
+        this.update();
+    };
+    </script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0c;
+            --bg-secondary: #101014;
+            --bg-tertiary: #18181b;
+            --bg-elevated: #1f1f23;
+            
+            /* Panel accent colors */
+            --panel-orange: rgba(230, 126, 34, 0.08);
+            --panel-orange-border: rgba(230, 126, 34, 0.25);
+            --panel-orange-text: #e67e22;
+            
+            --panel-turquoise: rgba(26, 188, 156, 0.08);
+            --panel-turquoise-border: rgba(26, 188, 156, 0.25);
+            --panel-turquoise-text: #1abc9c;
+            
+            --panel-purple: rgba(194, 166, 254, 0.08);
+            --panel-purple-border: rgba(194, 166, 254, 0.25);
+            --panel-purple-text: #c2a6fe;
+            
+            --accent-primary: #a1c4fd;
+            --accent-secondary: #c2a6fe;
+            --accent-glow: rgba(161, 196, 253, 0.15);
+            --success: #22c55e;
+            --warning: #eab308;
+            --error: #ef4444;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-hover: rgba(255, 255, 255, 0.12);
+            --radius: 12px;
+            --radius-sm: 6px;
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 1rem 1.25rem;
+        }
+        
+        /* Delyrism-style Header */
+        @keyframes glow-pulse {
+            0%, 100% { 
+                filter: drop-shadow(0 0 4px rgba(161, 196, 253, 0.15));
+            }
+            50% { 
+                filter: drop-shadow(0 0 8px rgba(161, 196, 253, 0.25))
+                        drop-shadow(0 0 15px rgba(194, 166, 254, 0.15));
+            }
+        }
+        
+        @keyframes gradient-shift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        @keyframes drip-fall {
+            0% { transform: translateY(0); opacity: 0.7; }
+            100% { transform: translateY(50px); opacity: 0; }
+        }
+        
+        @keyframes drip-spawn {
+            0%, 100% { opacity: 0; }
+            10%, 40% { opacity: 0.6; }
+        }
+        
+        header {
+            text-align: center;
+            padding: 0.5rem 0 1.5rem;
+            position: relative;
+        }
+        
+        .title-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .title {
+            font-size: 3rem;
+            font-weight: 200;
+            letter-spacing: 0.12em;
+            background: linear-gradient(120deg, #ffffff 0%, #a1c4fd 50%, #c2a6fe 100%);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+            line-height: 1.1;
+            animation: glow-pulse 4s ease-in-out infinite, gradient-shift 8s ease infinite;
+            filter: drop-shadow(0 0 4px rgba(161, 196, 253, 0.15));
+        }
+        
+        .drip-container {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            height: 50px;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        
+        .drip {
+            position: absolute;
+            font-size: 0.9rem;
+            font-weight: 200;
+            background: linear-gradient(180deg, #a1c4fd 0%, transparent 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: drip-fall 3s ease-in infinite, drip-spawn 3s ease-in-out infinite;
+            opacity: 0;
+        }
+        
+        .drip:nth-child(1) { left: 5%; animation-delay: 0s; }
+        .drip:nth-child(2) { left: 15%; animation-delay: 0.7s; }
+        .drip:nth-child(3) { left: 28%; animation-delay: 1.4s; }
+        .drip:nth-child(4) { left: 40%; animation-delay: 2.1s; }
+        .drip:nth-child(5) { left: 52%; animation-delay: 0.3s; }
+        .drip:nth-child(6) { left: 65%; animation-delay: 1.8s; }
+        .drip:nth-child(7) { left: 78%; animation-delay: 1.1s; }
+        .drip:nth-child(8) { left: 90%; animation-delay: 2.5s; }
+        
+        .subtitle {
+            font-size: 0.7rem;
+            color: #8899a6;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            margin-top: 0.5rem;
+        }
+        
+        .connection-badge {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            padding: 0.35rem 0.65rem;
+            background: var(--bg-tertiary);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+        
+        .status-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--error);
+            transition: background var(--transition);
+        }
+        
+        .status-dot.connected { 
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+        
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 340px 280px 1fr;
+            gap: 1rem;
+            height: calc(100vh - 130px);
+        }
+        
+        /* Panel Base */
+        .panel {
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: all var(--transition);
+            backdrop-filter: blur(8px);
+        }
+        
+        /* Panel: Data Sources (Burnt Orange) */
+        .panel.panel-sources {
+            background: linear-gradient(180deg, var(--panel-orange) 0%, var(--bg-secondary) 100%);
+            border-color: var(--panel-orange-border);
+        }
+        
+        .panel.panel-sources .panel-header {
+            color: var(--panel-orange-text);
+            border-bottom-color: var(--panel-orange-border);
+        }
+        
+        .panel.panel-sources .tab.active {
+            border-bottom-color: var(--panel-orange-text);
+            color: var(--panel-orange-text);
+        }
+        
+        /* Panel: Mining Config (Turquoise) */
+        .panel.panel-config {
+            background: linear-gradient(180deg, var(--panel-turquoise) 0%, var(--bg-secondary) 100%);
+            border-color: var(--panel-turquoise-border);
+        }
+        
+        .panel.panel-config .panel-header {
+            color: var(--panel-turquoise-text);
+            border-bottom-color: var(--panel-turquoise-border);
+        }
+        
+        .panel.panel-config .btn-primary {
+            background: linear-gradient(135deg, var(--panel-turquoise-text), #16a085);
+        }
+        
+        /* Panel: Results (Purple Pastel) */
+        .panel.panel-results {
+            background: linear-gradient(180deg, var(--panel-purple) 0%, var(--bg-secondary) 100%);
+            border-color: var(--panel-purple-border);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .spectral-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.4;
+            z-index: 0;
+        }
+        
+        .panel.panel-results .panel-header,
+        .panel.panel-results .results-tabs,
+        .panel.panel-results .panel-content,
+        .panel.panel-results .export-group {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .panel.panel-results .panel-header {
+            color: var(--panel-purple-text);
+            border-bottom-color: var(--panel-purple-border);
+        }
+        
+        .panel.panel-results .results-tab.active {
+            border-bottom-color: var(--panel-purple-text);
+            color: var(--panel-purple-text);
+        }
+        
+        .panel-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-weight: 400;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        
+        .panel-content {
+            padding: 1rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            padding: 0 0.5rem;
+        }
+        
+        .tab {
+            padding: 0.6rem 0.8rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 400;
+            letter-spacing: 0.03em;
+            border-bottom: 2px solid transparent;
+            transition: all var(--transition);
+            margin-bottom: -1px;
+        }
+        
+        .tab:hover { color: var(--text-secondary); }
+        
+        .tab.active {
+            color: var(--text-primary);
+        }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.25s ease; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Stats Cards */
+        .corpus-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-card {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.6rem 0.5rem;
+            border-radius: var(--radius-sm);
+            text-align: center;
+            border: 1px solid var(--panel-orange-border);
+            transition: all var(--transition);
+        }
+        
+        .stat-card:hover {
+            border-color: var(--panel-orange-text);
+            transform: translateY(-1px);
+        }
+        
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 300;
+            background: linear-gradient(135deg, var(--panel-orange-text), #f39c12);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+        }
+        
+        .stat-label {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-top: 0.15rem;
+        }
+        
+        /* Form Elements */
+        textarea, input[type="text"], input[type="number"], select {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.75rem;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.8rem;
+            transition: all var(--transition);
+        }
+        
+        textarea { resize: vertical; min-height: 100px; }
+        
+        textarea:focus, input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23a1a1aa'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            padding-right: 2rem;
+        }
+        
+        .input-group { margin-bottom: 0.65rem; }
+        
+        .input-label {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+        
+        .input-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .input-row input { flex: 1; }
+        
+        /* Buttons */
+        .btn {
+            padding: 0.55rem 0.9rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-weight: 400;
+            cursor: pointer;
+            transition: all var(--transition);
+            font-size: 0.7rem;
+            letter-spacing: 0.02em;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            font-family: inherit;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            color: white;
+        }
+        
+        .btn-primary:hover { 
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            border-color: var(--border-hover);
+        }
+        
+        .btn-danger { 
+            background: rgba(239, 68, 68, 0.15); 
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .btn-danger:hover { 
+            background: rgba(239, 68, 68, 0.25);
+        }
+        
+        .btn-success { background: var(--success); color: white; }
+        
+        .btn-group { display: flex; gap: 0.5rem; margin-top: 0.65rem; }
+        
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+        
+        .btn-sm { padding: 0.35rem 0.6rem; font-size: 0.65rem; }
+        
+        .btn-icon {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: var(--radius-sm);
+        }
+        
+        /* Document Board */
+        .doc-board {
+            margin-top: 0.75rem;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        
+        .doc-section { margin-bottom: 0.65rem; }
+        
+        .doc-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4rem 0.6rem;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-sm);
+            font-size: 0.7rem;
+            margin-bottom: 0.4rem;
+            color: var(--text-secondary);
+        }
+        
+        .doc-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .doc-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.45rem 0.6rem;
+            background: var(--bg-primary);
+            border-radius: var(--radius-sm);
+            font-size: 0.7rem;
+            border: 1px solid transparent;
+            transition: all var(--transition);
+        }
+        
+        .doc-item:hover {
+            border-color: var(--border);
+        }
+        
+        .doc-item-info {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        
+        .doc-icon {
+            font-size: 0.55rem;
+            font-weight: 600;
+            padding: 0.15rem 0.35rem;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            letter-spacing: 0.02em;
+        }
+        
+        .doc-item-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 160px;
+            color: var(--text-secondary);
+        }
+        
+        .doc-item-meta {
+            color: var(--text-muted);
+            font-size: 0.6rem;
+        }
+        
+        .doc-item-remove {
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 0.2rem;
+            opacity: 0;
+            transition: all var(--transition);
+        }
+        
+        .doc-item:hover .doc-item-remove { opacity: 1; }
+        .doc-item-remove:hover { color: var(--error); }
+        
+        /* Chunk params */
+        .chunk-params {
+            margin-top: 0.5rem;
+            padding: 0.6rem;
+            background: var(--bg-primary);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            animation: fadeIn 0.2s ease;
+        }
+        
+        .chunk-params .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+        
+        .chunk-params .input-group { margin-bottom: 0; }
+        
+        .chunk-preview {
+            margin-top: 0.5rem;
+            padding: 0.45rem 0.65rem;
+            background: var(--accent-glow);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            color: var(--accent-secondary);
+        }
+        
+        /* File buttons */
+        .file-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .file-buttons .btn { flex: 1; }
+        
+        /* Config section */
+        .config-compact {
+            padding-bottom: 0.65rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 0.65rem;
+        }
+        
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: var(--accent-primary);
+        }
+        
+        /* Radio Group for Semantic Spread */
+        .radio-group {
+            display: flex;
+            gap: 0.3rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .radio-option {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            padding: 0.35rem 0.4rem;
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            transition: all var(--transition);
+            flex: 1;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        
+        .radio-option:hover {
+            border-color: var(--panel-turquoise-border);
+        }
+        
+        .radio-option:has(input:checked) {
+            background: rgba(26, 188, 156, 0.15);
+            border-color: var(--panel-turquoise-text);
+            color: var(--panel-turquoise-text);
+        }
+        
+        .radio-option input[type="radio"] {
+            width: 12px;
+            height: 12px;
+            accent-color: var(--panel-turquoise-text);
+            margin: 0;
+        }
+        
+        .section-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.08em;
+            font-weight: 500;
+        }
+        
+        /* Progress Panel */
+        .progress-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .pipeline-stages {
+            display: flex;
+            gap: 3px;
+            margin-bottom: 0.75rem;
+        }
+        
+        .stage {
+            flex: 1;
+            height: 3px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 2px;
+            transition: all var(--transition);
+        }
+        
+        .stage.active {
+            background: var(--panel-turquoise-text);
+            box-shadow: 0 0 8px rgba(26, 188, 156, 0.4);
+            animation: stagePulse 1.5s ease-in-out infinite;
+        }
+        
+        .stage.complete { background: var(--success); }
+        .stage.error { background: var(--error); }
+        
+        @keyframes stagePulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .progress-bar-container {
+            height: 4px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--panel-turquoise-text), #2ecc71);
+            width: 0%;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 2px;
+        }
+        
+        .progress-stage {
+            font-size: 0.75rem;
+            color: var(--panel-turquoise-text);
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.02em;
+        }
+        
+        .log-container {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem;
+            font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.6rem;
+            overflow-y: auto;
+            max-height: 140px;
+            border: 1px solid var(--panel-turquoise-border);
+        }
+        
+        .log-entry {
+            color: var(--text-muted);
+            line-height: 1.5;
+            word-break: break-all;
+            padding: 0.15rem 0;
+        }
+        
+        .log-entry.error { color: var(--error); }
+        .log-entry.success { color: var(--success); }
+        .log-entry.info { color: var(--panel-turquoise-text); }
+        
+        /* Results Panel */
+        .results-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--panel-purple-border);
+            padding: 0 0.5rem;
+            background: rgba(0, 0, 0, 0.15);
+        }
+        
+        .results-tab {
+            padding: 0.55rem 0.875rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 400;
+            letter-spacing: 0.03em;
+            border-bottom: 2px solid transparent;
+            transition: all var(--transition);
+            margin-bottom: -1px;
+        }
+        
+        .results-tab:hover { color: var(--text-secondary); }
+        
+        .results-tab.active {
+            color: var(--panel-purple-text);
+        }
+        
+        .results-content { 
+            display: none; 
+            height: 100%;
+            animation: fadeIn 0.25s ease;
+        }
+        .results-content.active { display: flex; flex-direction: column; }
+        
+        /* Metrics Tab - Creative Constellation Visualization */
+        .metrics-container {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        /* Quality Score Hero Card */
+        .quality-hero {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, rgba(194, 166, 254, 0.15) 0%, rgba(99, 102, 241, 0.1) 100%);
+            border-radius: 10px;
+            border: 1px solid rgba(194, 166, 254, 0.3);
+        }
+        
+        .quality-ring {
+            position: relative;
+            width: 70px;
+            height: 70px;
+        }
+        
+        .quality-ring svg {
+            transform: rotate(-90deg);
+        }
+        
+        .quality-ring-bg {
+            stroke: rgba(255, 255, 255, 0.1);
+        }
+        
+        .quality-ring-fill {
+            stroke: url(#qualityGradient);
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease-out;
+        }
+        
+        .quality-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.3rem;
+            font-weight: 300;
+            color: var(--panel-purple-text);
+        }
+        
+        .quality-details {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+        
+        .quality-stat {
+            text-align: center;
+        }
+        
+        .quality-stat-value {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        .quality-stat-label {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        
+        /* Constellation Visualization Container */
+        .constellation-container {
+            position: relative;
+            display: flex;
+            gap: 0.5rem;
+            min-height: 0;
+            overflow: hidden;
+        }
+        
+        .constellation-canvas-wrapper {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(ellipse at center, rgba(20, 20, 35, 0.9) 0%, rgba(10, 10, 15, 1) 100%);
+            border-radius: 10px;
+            border: 1px solid rgba(194, 166, 254, 0.15);
+            overflow: hidden;
+        }
+        
+        #embedding3DContainer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        #embedding3DContainer canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .embedding3d-legend {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(10, 10, 12, 0.85);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .embedding3d-hint {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(10, 10, 12, 0.7);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Similarity Matrix Panel */
+        .similarity-panel {
+            width: 180px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .similarity-title {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.4rem;
+            text-align: center;
+        }
+        
+        #similarityMatrix {
+            flex: 1;
+            min-height: 0;
+        }
+        
+        /* Per-Archetype Metrics Cards */
+        .archetype-metrics-grid {
+            display: flex;
+            gap: 0.4rem;
+            overflow-x: auto;
+            padding-bottom: 0.25rem;
+        }
+        
+        .archetype-metrics-grid::-webkit-scrollbar {
+            height: 4px;
+        }
+        
+        .archetype-metric-card {
+            flex: 0 0 auto;
+            min-width: 140px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 8px;
+            padding: 0.5rem 0.6rem;
+            border-left: 3px solid;
+            transition: all 0.2s ease;
+        }
+        
+        .archetype-metric-card:hover {
+            background: rgba(0, 0, 0, 0.35);
+            transform: translateY(-1px);
+        }
+        
+        .archetype-metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.4rem;
+        }
+        
+        .archetype-metric-name {
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 90px;
+        }
+        
+        .archetype-metric-size {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+        }
+        
+        .metric-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .metric-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        .metric-bar-label {
+            font-size: 0.5rem;
+            color: var(--text-muted);
+            width: 12px;
+            text-transform: uppercase;
+        }
+        
+        .metric-bar-track {
+            flex: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .metric-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease-out;
+        }
+        
+        .metric-bar-fill.dispersion { background: linear-gradient(90deg, #06b6d4, #22d3ee); }  /* Cyan - distinct from archetypes */
+        .metric-bar-fill.leakage { background: linear-gradient(90deg, #f43f5e, #fb7185); }     /* Rose - distinct from archetypes */
+        .metric-bar-fill.entropy { background: linear-gradient(90deg, #a3e635, #bef264); }     /* Lime - distinct from archetypes */
+        
+        .metric-bar-value {
+            font-size: 0.5rem;
+            color: var(--text-secondary);
+            width: 24px;
+            text-align: right;
+        }
+        
+        /* Tooltip for constellation */
+        .constellation-tooltip {
+            position: absolute;
+            background: rgba(20, 20, 30, 0.95);
+            border: 1px solid rgba(194, 166, 254, 0.4);
+            border-radius: 6px;
+            padding: 0.5rem 0.7rem;
+            font-size: 0.7rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            z-index: 100;
+            max-width: 200px;
+        }
+        
+        .constellation-tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip-name {
+            color: var(--panel-purple-text);
+            font-weight: 500;
+            margin-bottom: 0.3rem;
+        }
+        
+        .tooltip-metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.3rem;
+            font-size: 0.6rem;
+        }
+        
+        .tooltip-metric {
+            text-align: center;
+        }
+        
+        .tooltip-metric-value {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .tooltip-metric-label {
+            color: var(--text-muted);
+            font-size: 0.5rem;
+        }
+        
+        /* Archetype Cards */
+        .archetypes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 0.75rem;
+            overflow-y: auto;
+            padding: 1rem;
+            padding-right: 0.5rem;
+        }
+        
+        .archetype-card {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: var(--radius);
+            padding: 1rem;
+            border-left: 3px solid;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border-color: var(--panel-purple-text);
+        }
+        
+        .archetype-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(194, 166, 254, 0.1);
+            border-color: #d4bfff;
+        }
+        
+        .archetype-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+        
+        .archetype-name {
+            font-weight: 300;
+            font-size: 0.85rem;
+            color: var(--panel-purple-text);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        
+        .archetype-count {
+            background: var(--panel-purple-text);
+            color: var(--bg-primary);
+            padding: 0.15rem 0.45rem;
+            border-radius: 10px;
+            font-size: 0.55rem;
+            font-weight: 500;
+        }
+        
+        .descriptor-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+        }
+        
+        .descriptor-tag {
+            background: rgba(194, 166, 254, 0.08);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            border: 1px solid var(--panel-purple-border);
+            transition: all var(--transition);
+        }
+        
+        .descriptor-tag:hover {
+            background: rgba(194, 166, 254, 0.15);
+            border-color: var(--panel-purple-text);
+            color: var(--text-primary);
+        }
+        
+        .descriptor-tag.more {
+            background: transparent;
+            color: var(--text-muted);
+            border-style: dashed;
+        }
+        
+        /* Cluster Visualization */
+        .cluster-viz-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 1rem;
+        }
+        
+        .cluster-canvas-container {
+            flex: 1;
+            background: var(--bg-primary);
+            border-radius: var(--radius);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        
+        #clusterCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .cluster-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            padding: 0.65rem;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-sm);
+            margin-top: 0.6rem;
+            max-height: 70px;
+            overflow-y: auto;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 3rem 2rem;
+        }
+        
+        .empty-state-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 1rem;
+            opacity: 0.3;
+            background: var(--bg-tertiary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .empty-state-text {
+            font-size: 0.85rem;
+        }
+        
+        /* Export Section */
+        .export-group {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.65rem 1rem;
+            border-top: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { 
+            background: var(--border); 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+        
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .main-grid { grid-template-columns: 1fr 1fr; }
+            .panel.panel-results { grid-column: span 2; }
+        }
+        
+        @media (max-width: 768px) {
+            .main-grid { grid-template-columns: 1fr; height: auto; }
+            .panel { min-height: 400px; }
+            .panel.panel-results { grid-column: span 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="title-container">
+                <div class="title">E G R E G O R E</div>
+                <div class="drip-container">
+                    <span class="drip">ᚨ</span>
+                    <span class="drip">ᚱ</span>
+                    <span class="drip">ᚲ</span>
+                    <span class="drip">ᛖ</span>
+                    <span class="drip">ᛏ</span>
+                    <span class="drip">ʏ</span>
+                    <span class="drip">ᛈ</span>
+                    <span class="drip">∿</span>
+                </div>
+            </div>
+            <div class="subtitle">Archetype Builder</div>
+            <div class="connection-badge">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Disconnected</span>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <!-- Left Panel: Data Sources (Burnt Orange) -->
+            <div class="panel panel-sources">
+                <div class="panel-header">
+                    Data Sources
+                    <button class="btn btn-danger btn-sm" onclick="clearCorpus()">Clear</button>
+                </div>
+                
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('text')">Text</div>
+                    <div class="tab" onclick="switchTab('pdf')">PDF</div>
+                    <div class="tab" onclick="switchTab('images')">Images</div>
+                </div>
+                
+                <div class="panel-content">
+                    <!-- Corpus Stats -->
+                    <div class="corpus-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="pdfCount">0</div>
+                            <div class="stat-label">PDFs</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="imageCount">0</div>
+                            <div class="stat-label">Images</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="textCount">0</div>
+                            <div class="stat-label">Texts</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="chunkCount">0</div>
+                            <div class="stat-label">Chunks</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Text Input Tab -->
+                    <div id="tab-text" class="tab-content active">
+                        <div class="input-group">
+                            <label class="input-label">Text content</label>
+                            <textarea id="textInput" placeholder="Paste or type text here..." oninput="previewChunks()"></textarea>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label">Source label</label>
+                            <input type="text" id="textSource" value="manual" placeholder="Source name">
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label">Chunking</label>
+                            <select id="textChunking" onchange="updateChunkingParams('text')">
+                                <option value="paragraph">Paragraph</option>
+                                <option value="sentence">Sentence</option>
+                                <option value="sliding">Sliding window</option>
+                                <option value="none">None (whole text)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Paragraph params -->
+                        <div id="textParams-paragraph" class="chunk-params">
+                            <div class="config-grid">
+                                <div class="input-group">
+                                    <label class="input-label">Min length</label>
+                                    <input type="number" id="textParaMinLen" value="50" min="10" max="500" oninput="previewChunks()">
+                                </div>
+                                <div class="input-group">
+                                    <label class="input-label">Max length</label>
+                                    <input type="number" id="textParaMaxLen" value="1000" min="100" max="5000" oninput="previewChunks()">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sentence params -->
+                        <div id="textParams-sentence" class="chunk-params" style="display:none;">
+                            <div class="config-grid">
+                                <div class="input-group">
+                                    <label class="input-label">Sentences/chunk</label>
+                                    <input type="number" id="textSentPerChunk" value="5" min="1" max="20" oninput="previewChunks()">
+                                </div>
+                                <div class="input-group">
+                                    <label class="input-label">Overlap sentences</label>
+                                    <input type="number" id="textSentOverlap" value="1" min="0" max="10" oninput="previewChunks()">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sliding window params -->
+                        <div id="textParams-sliding" class="chunk-params" style="display:none;">
+                            <div class="config-grid">
+                                <div class="input-group">
+                                    <label class="input-label">Window size</label>
+                                    <input type="number" id="textWindowSize" value="512" min="100" max="2000" oninput="previewChunks()">
+                                </div>
+                                <div class="input-group">
+                                    <label class="input-label">Stride</label>
+                                    <input type="number" id="textStride" value="256" min="50" max="1000" oninput="previewChunks()">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="chunk-preview" id="chunkPreview" style="display:none;">
+                            <span>Preview: <strong id="previewCount">0</strong> chunks</span>
+                        </div>
+                        
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="addText()">Add Text</button>
+                        </div>
+                    </div>
+                    
+                    <!-- PDF Input Tab -->
+                    <div id="tab-pdf" class="tab-content">
+                        <div class="input-group">
+                            <label class="input-label">Select PDF Files or Folder</label>
+                            <div class="file-buttons">
+                                <button class="btn btn-secondary" onclick="document.getElementById('pdfFileInput').click()">
+                                    Select PDFs
+                                </button>
+                                <button class="btn btn-secondary" onclick="document.getElementById('pdfFolderInput').click()">
+                                    Select Folder
+                                </button>
+                                <input type="file" id="pdfFileInput" accept=".pdf" multiple style="display:none" onchange="handlePDFFiles(this.files)">
+                                <input type="file" id="pdfFolderInput" webkitdirectory directory style="display:none" onchange="handlePDFFolder(this.files)">
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label">Or enter folder path manually</label>
+                            <div class="input-row">
+                                <input type="text" id="pdfPath" placeholder="C:/path/to/pdfs">
+                                <button class="btn btn-primary" onclick="scanPDFs()">Scan</button>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label">Chunking Method</label>
+                            <select id="pdfChunking" onchange="updateChunkingParams('pdf')">
+                                <option value="paragraph">Paragraph</option>
+                                <option value="sentence">Sentence</option>
+                                <option value="sliding">Sliding window</option>
+                                <option value="page">By page</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Paragraph params -->
+                        <div id="pdfParams-paragraph" class="chunk-params">
+                            <div class="config-grid">
+                                <div class="input-group">
+                                    <label class="input-label">Min length</label>
+                                    <input type="number" id="pdfParaMinLen" value="50" min="10" max="500">
+                                </div>
+                                <div class="input-group">
+                                    <label class="input-label">Max length</label>
+                                    <input type="number" id="pdfParaMaxLen" value="1000" min="100" max="5000">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sentence params -->
+                        <div id="pdfParams-sentence" class="chunk-params" style="display:none;">
+                            <div class="config-grid">
+                                <div class="input-group">
+                                    <label class="input-label">Sentences/chunk</label>
+                                    <input type="number" id="pdfSentPerChunk" value="5" min="1" max="20">
+                                </div>
+                                <div class="input-group">
+                                    <label class="input-label">Overlap sentences</label>
+                                    <input type="number" id="pdfSentOverlap" value="1" min="0" max="10">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sliding window params -->
+                        <div id="pdfParams-sliding" class="chunk-params" style="display:none;">
+                            <div class="config-grid">
+                                <div class="input-group">
+                                    <label class="input-label">Window size</label>
+                                    <input type="number" id="pdfWindowSize" value="512" min="100" max="2000">
+                                </div>
+                                <div class="input-group">
+                                    <label class="input-label">Stride</label>
+                                    <input type="number" id="pdfStride" value="256" min="50" max="1000">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="pdfRecursive" checked>
+                            <label for="pdfRecursive">Scan subfolders</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Images Input Tab -->
+                    <div id="tab-images" class="tab-content">
+                        <div class="input-group">
+                            <label class="input-label">Select Image Files or Folder</label>
+                            <div class="file-buttons">
+                                <button class="btn btn-secondary" onclick="document.getElementById('imageFileInput').click()">
+                                    Select Images
+                                </button>
+                                <button class="btn btn-secondary" onclick="document.getElementById('imageFolderInput').click()">
+                                    Select Folder
+                                </button>
+                                <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none" onchange="handleImageFiles(this.files)">
+                                <input type="file" id="imageFolderInput" webkitdirectory directory style="display:none" onchange="handleImageFolder(this.files)">
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label">Or enter folder path manually</label>
+                            <div class="input-row">
+                                <input type="text" id="imagePath" placeholder="C:/path/to/images">
+                                <button class="btn btn-primary" onclick="scanImages()">Scan</button>
+                            </div>
+                        </div>
+                        
+                        <div class="config-grid">
+                            <div class="input-group">
+                                <label class="input-label">Max images</label>
+                                <input type="number" id="maxImages" value="500" min="10" max="5000">
+                            </div>
+                            <div></div>
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="imageRecursive" checked>
+                            <label for="imageRecursive">Scan subfolders</label>
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="describeImages">
+                            <label for="describeImages">Describe with Vision LLM</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Document Board -->
+                    <div class="doc-board" id="docBoard">
+                        <div class="doc-section" id="pdfSection" style="display:none;">
+                            <div class="doc-section-header">
+                                <div class="doc-section-title">PDFs</div>
+                                <span id="pdfSectionCount">0 files</span>
+                            </div>
+                            <div class="doc-list" id="pdfList"></div>
+                        </div>
+                        
+                        <div class="doc-section" id="imageSection" style="display:none;">
+                            <div class="doc-section-header">
+                                <div class="doc-section-title">Images</div>
+                                <span id="imageSectionCount">0 files</span>
+                            </div>
+                            <div class="image-grid" id="imageGrid"></div>
+                        </div>
+                        
+                        <div class="doc-section" id="textSection" style="display:none;">
+                            <div class="doc-section-header">
+                                <div class="doc-section-title">Text Sources</div>
+                                <span id="textSectionCount">0 items</span>
+                            </div>
+                            <div class="doc-list" id="textList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Center Panel: Config + Progress (Turquoise) -->
+            <div class="panel panel-config">
+                <div class="panel-header">
+                    Builder Configuration
+                    <span id="jobStatus" style="font-size: 0.65rem; color: var(--text-secondary);"></span>
+                </div>
+                <div class="panel-content" style="padding: 0.75rem;">
+                    <!-- Mining Config -->
+                    <div class="config-compact">
+                        <div class="input-group">
+                            <label class="input-label">Embedder Model</label>
+                            <select id="embedder">
+                                <option value="cloudflare-large">Cloudflare BGE-Large (1024d)</option>
+                                <option value="cloudflare">Cloudflare BGE-Base (768d, fast)</option>
+                                <option value="qwen3">Local Qwen3</option>
+                                <option value="sentence-transformer">Sentence Transformer</option>
+                            </select>
+                        </div>
+                        
+                        <div class="config-grid">
+                            <div class="input-group">
+                                <label class="input-label">K Neighbors</label>
+                                <input type="number" id="kNeighbors" value="15" min="3" max="50">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">Min Cluster</label>
+                                <input type="number" id="minCluster" value="3" min="2" max="20">
+                            </div>
+                        </div>
+                        
+                        <div class="config-grid">
+                            <div class="input-group">
+                                <label class="input-label">Resolution</label>
+                                <input type="number" id="resolution" value="1.0" min="0.1" max="3.0" step="0.1">
+                            </div>
+                            <div class="checkbox-group" style="margin-top: 1.25rem;">
+                                <input type="checkbox" id="useLLM" checked>
+                                <label for="useLLM">LLM Refinement</label>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label">LLM Model</label>
+                            <select id="llmModel">
+                                <option value="@cf/meta/llama-3.1-8b-instruct">Llama 3.1 8B (default)</option>
+                                <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B (quality)</option>
+                                <option value="@hf/google/gemma-7b-it">Google Gemma 7B</option>
+                            </select>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label class="input-label">Semantic Spread</label>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="semanticSpread" value="0.15">
+                                    <span>Focused</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="semanticSpread" value="0.5" checked>
+                                    <span>Divergent</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-primary" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem;" onclick="startMining()" id="mineBtn">
+                            Start Building
+                        </button>
+                    </div>
+                    
+                    <!-- Progress Section -->
+                    <div class="progress-section">
+                        <div class="section-label">Pipeline Progress</div>
+                        <div class="pipeline-stages">
+                            <div class="stage" title="Initialize"></div>
+                            <div class="stage" title="Embed"></div>
+                            <div class="stage" title="Graph"></div>
+                            <div class="stage" title="Cluster"></div>
+                            <div class="stage" title="Concepts"></div>
+                            <div class="stage" title="LLM"></div>
+                        </div>
+                        
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progressBar"></div>
+                        </div>
+                        <div class="progress-stage" id="progressStage">Ready</div>
+                    </div>
+                    
+                    <div class="log-container" id="logContainer">
+                        <div class="log-entry info">Add data sources and click Start Mining</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel: Results (Purple Pastel) -->
+            <div class="panel panel-results">
+                <canvas id="spectralCanvas" class="spectral-canvas"></canvas>
+                <div class="panel-header">
+                    Results
+                    <span id="archetypeCount" style="font-size: 0.65rem; color: var(--text-secondary);"></span>
+                </div>
+                
+                <div class="results-tabs">
+                    <div class="results-tab active" onclick="switchResultsTab('archetypes')">Archetypes</div>
+                    <div class="results-tab" onclick="switchResultsTab('clusters')">Clusters</div>
+                    <div class="results-tab" onclick="switchResultsTab('metrics')">Metrics</div>
+                </div>
+                
+                <div class="panel-content" style="padding: 0.75rem;">
+                    <!-- Archetypes Tab -->
+                    <div id="results-archetypes" class="results-content active">
+                        <div class="archetypes-grid" id="archetypesGrid">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <path d="M12 6v6l4 2"/>
+                                    </svg>
+                                </div>
+                                <p>Run builder to discover archetypes</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Clusters Tab -->
+                    <div id="results-clusters" class="results-content">
+                        <div class="cluster-stats">
+                            <div class="cluster-stat">
+                                <span>Nodes:</span>
+                                <span class="cluster-stat-value" id="clusterNodes">0</span>
+                            </div>
+                            <div class="cluster-stat">
+                                <span>Clusters:</span>
+                                <span class="cluster-stat-value" id="clusterCount">0</span>
+                            </div>
+                            <div class="cluster-stat">
+                                <span>Edges:</span>
+                                <span class="cluster-stat-value" id="clusterEdges">0</span>
+                            </div>
+                        </div>
+                        <div class="cluster-viz-container">
+                            <div class="cluster-canvas-container">
+                                <canvas id="clusterCanvas"></canvas>
+                            </div>
+                            <div class="cluster-legend" id="clusterLegend"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Metrics Tab - Creative Constellation Visualization -->
+                    <div id="results-metrics" class="results-content">
+                        <div class="metrics-container">
+                            <!-- Quality Score Hero -->
+                            <div class="quality-hero">
+                                <div class="quality-ring">
+                                    <svg width="70" height="70" viewBox="0 0 70 70">
+                                        <defs>
+                                            <linearGradient id="qualityGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stop-color="#8b5cf6"/>
+                                                <stop offset="50%" stop-color="#a78bfa"/>
+                                                <stop offset="100%" stop-color="#c4b5fd"/>
+                                            </linearGradient>
+                                        </defs>
+                                        <circle class="quality-ring-bg" cx="35" cy="35" r="28" fill="none" stroke-width="6"/>
+                                        <circle class="quality-ring-fill" id="qualityRingFill" cx="35" cy="35" r="28" fill="none" stroke-width="6" 
+                                                stroke-dasharray="175.9" stroke-dashoffset="175.9"/>
+                                    </svg>
+                                    <div class="quality-value" id="qualityScore">—</div>
+                                </div>
+                                <div class="quality-details">
+                                    <div class="quality-stat">
+                                        <div class="quality-stat-value" id="metricCoherence">—</div>
+                                        <div class="quality-stat-label">Coherence</div>
+                                    </div>
+                                    <div class="quality-stat">
+                                        <div class="quality-stat-value" id="metricSeparation">—</div>
+                                        <div class="quality-stat-label">Separation</div>
+                                    </div>
+                                    <div class="quality-stat">
+                                        <div class="quality-stat-value" id="metricFocus">—</div>
+                                        <div class="quality-stat-label">Focus</div>
+                                    </div>
+                                    <div class="quality-stat">
+                                        <div class="quality-stat-value" id="metricBalance">—</div>
+                                        <div class="quality-stat-label">Balance</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 3D Embedding Space + Similarity Matrix -->
+                            <div class="constellation-container">
+                                <div class="constellation-canvas-wrapper">
+                                    <div id="embedding3DContainer">
+                                        <div class="embedding3d-hint">🖱️ Drag to rotate • Scroll to zoom</div>
+                                        <div class="embedding3d-legend" id="embedding3DLegend"></div>
+                                    </div>
+                                </div>
+                                <div class="similarity-panel">
+                                    <div class="similarity-title">Inter-Archetype Affinity</div>
+                                    <canvas id="similarityMatrix"></canvas>
+                                </div>
+                            </div>
+                            
+                            <!-- Per-Archetype Metric Cards -->
+                            <div class="archetype-metrics-grid" id="archetypeMetricsGrid"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="export-group" id="exportGroup" style="display: none;">
+                    <button class="btn btn-secondary btn-sm" onclick="exportJSON()">Export JSON</button>
+                    <button class="btn btn-secondary btn-sm" onclick="copyToClipboard()">Copy</button>
+                    <button class="btn btn-primary btn-sm" onclick="sendToExplorer()">Open in Explorer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        console.log('=== EGREGORE SCRIPT LOADED ===');
+        
+        let ws = null;
+        let currentResults = null;
+        let corpusData = { pdfs: [], images: [], texts: [], totalChunks: 0 };
+        let clusterData = null;
+        
+        // Cluster colors
+        const CLUSTER_COLORS = [
+            '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+            '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+            '#14b8a6', '#eab308', '#a855f7', '#22c55e', '#0ea5e9'
+        ];
+        
+        // Helper: Convert hex color to rgba
+        function hexToRgba(hex, alpha) {
+            // Handle shorthand (#abc) or full (#aabbcc) hex
+            let r, g, b;
+            hex = hex.replace('#', '');
+            if (hex.length === 3) {
+                r = parseInt(hex[0] + hex[0], 16);
+                g = parseInt(hex[1] + hex[1], 16);
+                b = parseInt(hex[2] + hex[2], 16);
+            } else {
+                r = parseInt(hex.substring(0, 2), 16);
+                g = parseInt(hex.substring(2, 4), 16);
+                b = parseInt(hex.substring(4, 6), 16);
+            }
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        
+        // Toggle chunking params visibility
+        function updateChunkingParams(prefix) {
+            const method = document.getElementById(`${prefix}Chunking`).value;
+            const methods = ['paragraph', 'sentence', 'sliding', 'page', 'none'];
+            
+            methods.forEach(m => {
+                const el = document.getElementById(`${prefix}Params-${m}`);
+                if (el) el.style.display = m === method ? 'block' : 'none';
+            });
+            
+            // Update preview if on text tab
+            if (prefix === 'text') previewChunks();
+        }
+        
+        // Get chunking config for a prefix (text or pdf)
+        function getChunkingConfig(prefix) {
+            const method = document.getElementById(`${prefix}Chunking`).value;
+            const config = { method };
+            
+            if (method === 'paragraph') {
+                config.min_length = parseInt(document.getElementById(`${prefix}ParaMinLen`).value);
+                config.max_length = parseInt(document.getElementById(`${prefix}ParaMaxLen`).value);
+            } else if (method === 'sentence') {
+                config.sentences_per_chunk = parseInt(document.getElementById(`${prefix}SentPerChunk`).value);
+                config.overlap_sentences = parseInt(document.getElementById(`${prefix}SentOverlap`).value);
+            } else if (method === 'sliding') {
+                config.window_size = parseInt(document.getElementById(`${prefix}WindowSize`).value);
+                config.stride = parseInt(document.getElementById(`${prefix}Stride`).value);
+            }
+            
+            return config;
+        }
+        
+        // Client-side chunk preview (estimates)
+        function previewChunks() {
+            const text = document.getElementById('textInput').value;
+            const previewEl = document.getElementById('chunkPreview');
+            const countEl = document.getElementById('previewCount');
+            
+            if (!text.trim()) {
+                previewEl.style.display = 'none';
+                return;
+            }
+            
+            const config = getChunkingConfig('text');
+            let chunks = 0;
+            
+            if (config.method === 'none') {
+                chunks = 1;
+            } else if (config.method === 'paragraph') {
+                // Estimate paragraph chunks
+                const paras = text.split(/\n\s*\n/).filter(p => p.trim().length >= (config.min_length || 50));
+                chunks = paras.length || 1;
+            } else if (config.method === 'sentence') {
+                // Estimate sentence chunks
+                const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+                const perChunk = config.sentences_per_chunk || 5;
+                const overlap = config.overlap_sentences || 1;
+                if (sentences.length <= perChunk) {
+                    chunks = 1;
+                } else {
+                    chunks = Math.ceil((sentences.length - overlap) / (perChunk - overlap));
+                }
+            } else if (config.method === 'sliding') {
+                // Estimate sliding window chunks
+                const windowSize = config.window_size || 512;
+                const stride = config.stride || 256;
+                chunks = Math.max(1, Math.ceil((text.length - windowSize) / stride) + 1);
+            }
+            
+            countEl.textContent = chunks;
+            previewEl.style.display = 'block';
+        }
+        
+        function switchResultsTab(tabName) {
+            document.querySelectorAll('.results-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.results-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`results-${tabName}`).classList.add('active');
+            
+            if (tabName === 'clusters' && clusterData) {
+                setTimeout(() => drawClusterViz(), 100);
+            }
+            
+            // Redraw metrics visualizations when switching to metrics tab
+            if (tabName === 'metrics' && metricsData) {
+                setTimeout(() => {
+                    const { metrics, archetypeNames } = metricsData;
+                    draw3DEmbeddings(metrics.embedding_coords || [], archetypeNames);
+                    if (metrics.inter_similarity) {
+                        drawSimilarityMatrix(metrics.inter_similarity, archetypeNames);
+                    }
+                }, 100);
+            }
+        }
+        
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach((t, i) => {
+                t.classList.toggle('active', 
+                    (tabName === 'text' && i === 0) || 
+                    (tabName === 'pdf' && i === 1) || 
+                    (tabName === 'images' && i === 2));
+            });
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+        
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            
+            ws.onopen = () => {
+                document.getElementById('statusDot').classList.add('connected');
+                document.getElementById('statusText').textContent = 'Connected';
+                addLog('Connected to server', 'success');
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('statusDot').classList.remove('connected');
+                document.getElementById('statusText').textContent = 'Disconnected';
+                setTimeout(connect, 2000);
+            };
+            
+            ws.onerror = (err) => console.error('WebSocket error:', err);
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    console.log('[WS] Received message type:', msg.type);
+                    handleMessage(msg);
+                } catch(err) {
+                    console.error('[WS] Parse error:', err, e.data);
+                }
+            };
+        }
+        
+        function handleMessage(msg) {
+            console.log('[handleMessage] Processing:', msg.type);
+            switch (msg.type) {
+                case 'init':
+                    if (msg.corpus) updateFromServer(msg.corpus);
+                    break;
+                case 'corpus_updated':
+                    updateFromServer(msg);
+                    break;
+                case 'corpus_cleared':
+                    corpusData = { pdfs: [], images: [], texts: [], totalChunks: 0 };
+                    updateDisplay();
+                    addLog('Corpus cleared', 'info');
+                    break;
+                case 'pdf_scanned':
+                    corpusData.pdfs.push(...msg.pdfs);
+                    corpusData.totalChunks += msg.chunks;
+                    updateDisplay();
+                    addLog(`Added ${msg.pdfs.length} PDFs (${msg.chunks} chunks)`, 'success');
+                    break;
+                case 'images_scanned':
+                    corpusData.images.push(...msg.images);
+                    updateDisplay();
+                    addLog(`Added ${msg.images.length} images`, 'success');
+                    break;
+                case 'text_added':
+                    corpusData.texts.push(...msg.texts);
+                    corpusData.totalChunks += msg.chunks;
+                    updateDisplay();
+                    addLog(`Added text (${msg.chunks} chunks)`, 'success');
+                    break;
+                case 'job_created':
+                    document.getElementById('mineBtn').disabled = true;
+                    document.getElementById('jobStatus').textContent = `Job: ${msg.job.id}`;
+                    clearLogs();
+                    resetStages();
+                    break;
+                case 'progress':
+                    updateProgress(msg);
+                    break;
+                case 'job_completed':
+                    console.log('=== JOB COMPLETED MESSAGE RECEIVED ===');
+                    console.log('msg:', msg);
+                    console.log('msg.result:', msg.result);
+                    console.log('msg.result.archetypes:', msg.result?.archetypes);
+                    document.getElementById('mineBtn').disabled = false;
+                    currentResults = msg.result;
+                    try {
+                        displayResults(msg.result);
+                    } catch(err) {
+                        console.error('[displayResults] Error:', err);
+                        addLog('❌ Error displaying results: ' + err.message, 'error');
+                    }
+                    addLog('✅ Mining completed!', 'success');
+                    completeStages();
+                    break;
+                case 'job_failed':
+                    document.getElementById('mineBtn').disabled = false;
+                    addLog(`❌ Error: ${msg.error}`, 'error');
+                    errorStages();
+                    break;
+                case 'scan_progress':
+                    addLog(msg.message, 'info');
+                    break;
+            }
+        }
+        
+        function updateFromServer(data) {
+            if (data.pdf_items) corpusData.pdfs = data.pdf_items;
+            if (data.image_items) corpusData.images = data.image_items;
+            if (data.text_items) corpusData.texts = data.text_items;
+            if (data.chunks !== undefined) corpusData.totalChunks = data.chunks;
+            updateDisplay();
+        }
+        
+        function updateDisplay() {
+            document.getElementById('pdfCount').textContent = corpusData.pdfs.length;
+            document.getElementById('imageCount').textContent = corpusData.images.length;
+            document.getElementById('textCount').textContent = corpusData.texts.length;
+            document.getElementById('chunkCount').textContent = corpusData.totalChunks;
+            
+            // PDFs
+            const pdfSection = document.getElementById('pdfSection');
+            const pdfList = document.getElementById('pdfList');
+            if (corpusData.pdfs.length > 0) {
+                pdfSection.style.display = 'block';
+                document.getElementById('pdfSectionCount').textContent = `${corpusData.pdfs.length} files`;
+                pdfList.innerHTML = corpusData.pdfs.map((p, i) => `
+                    <div class="doc-item">
+                        <div class="doc-item-info">
+                            <span class="doc-icon">PDF</span>
+                            <span class="doc-item-name">${p.name}</span>
+                            <span class="doc-item-meta">${p.pages || '?'}p, ${p.chunks || '?'}c</span>
+                        </div>
+                        <span class="doc-item-remove" onclick="removeItem('pdf', ${i})">✕</span>
+                    </div>
+                `).join('');
+            } else pdfSection.style.display = 'none';
+            
+            // Images
+            const imageSection = document.getElementById('imageSection');
+            const imageGrid = document.getElementById('imageGrid');
+            if (corpusData.images.length > 0) {
+                imageSection.style.display = 'block';
+                document.getElementById('imageSectionCount').textContent = `${corpusData.images.length} files`;
+                const thumbs = corpusData.images.slice(0, 20).map(img => 
+                    `<div class="image-thumb" title="${img.name}">${img.name.slice(0,6)}</div>`
+                ).join('');
+                const more = corpusData.images.length > 20 ? 
+                    `<div class="image-thumb">+${corpusData.images.length - 20}</div>` : '';
+                imageGrid.innerHTML = thumbs + more;
+            } else imageSection.style.display = 'none';
+            
+            // Texts
+            const textSection = document.getElementById('textSection');
+            const textList = document.getElementById('textList');
+            if (corpusData.texts.length > 0) {
+                textSection.style.display = 'block';
+                document.getElementById('textSectionCount').textContent = `${corpusData.texts.length} sources`;
+                textList.innerHTML = corpusData.texts.map((t, i) => `
+                    <div class="doc-item">
+                        <div class="doc-item-info">
+                            <span class="doc-icon">TXT</span>
+                            <span class="doc-item-name">${t.source}</span>
+                            <span class="doc-item-meta">${t.chunks || 1}c</span>
+                        </div>
+                        <span class="doc-item-remove" onclick="removeItem('text', ${i})">✕</span>
+                    </div>
+                `).join('');
+            } else textSection.style.display = 'none';
+        }
+        
+        function updateProgress(msg) {
+            document.getElementById('progressBar').style.width = `${msg.progress * 100}%`;
+            document.getElementById('progressStage').textContent = 
+                msg.detail ? `${msg.stage}: ${msg.detail}` : msg.stage;
+            if (msg.log) addLog(msg.log);
+            
+            const stageMap = {
+                'Initializing': 0, 'Loading embedder': 0, 'Creating miner': 0,
+                'Loading corpus': 1, 'Loading images': 1, 'Embedding': 1, 'Embedding complete': 1,
+                'Building graph': 2, 'Graph built': 2,
+                'Clustering': 3, 'Clusters found': 3,
+                'Extracting concepts': 4,
+                'LLM refinement': 5, 'LLM complete': 5
+            };
+            const idx = stageMap[msg.stage] ?? -1;
+            document.querySelectorAll('.stage').forEach((s, i) => {
+                s.classList.remove('active', 'complete');
+                if (i < idx) s.classList.add('complete');
+                else if (i === idx) s.classList.add('active');
+            });
+        }
+        
+        function resetStages() {
+            document.querySelectorAll('.stage').forEach(s => 
+                s.classList.remove('active', 'complete', 'error'));
+        }
+        
+        function completeStages() {
+            document.querySelectorAll('.stage').forEach(s => {
+                s.classList.remove('active', 'error');
+                s.classList.add('complete');
+            });
+        }
+        
+        function errorStages() {
+            document.querySelectorAll('.stage').forEach(s => {
+                if (s.classList.contains('active')) {
+                    s.classList.remove('active');
+                    s.classList.add('error');
+                }
+            });
+        }
+        
+        function addLog(msg, type = '') {
+            const container = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+        
+        // Actions
+        function addText() {
+            const text = document.getElementById('textInput').value.trim();
+            const source = document.getElementById('textSource').value || 'manual';
+            if (!text) return;
+            
+            const chunkConfig = getChunkingConfig('text');
+            
+            ws.send(JSON.stringify({
+                type: 'add_text',
+                text: text,
+                source: source,
+                chunking: chunkConfig.method,
+                chunk_params: chunkConfig
+            }));
+            document.getElementById('textInput').value = '';
+        }
+        
+        function scanPDFs() {
+            const path = document.getElementById('pdfPath').value.trim();
+            if (!path) { alert('Enter a folder path'); return; }
+            
+            const chunkConfig = getChunkingConfig('pdf');
+            
+            ws.send(JSON.stringify({
+                type: 'scan_pdfs',
+                path: path,
+                recursive: document.getElementById('pdfRecursive').checked,
+                chunking: chunkConfig.method,
+                chunk_params: chunkConfig
+            }));
+            addLog(`Scanning PDFs: ${path}`, 'info');
+        }
+        
+        function handlePDFFiles(files) {
+            if (!files || files.length === 0) return;
+            addLog(`Uploading ${files.length} PDF files...`, 'info');
+            
+            for (const file of files) {
+                if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                    uploadPDF(file);
+                }
+            }
+        }
+        
+        function handlePDFFolder(files) {
+            if (!files || files.length === 0) return;
+            const pdfFiles = Array.from(files).filter(f => 
+                f.type === 'application/pdf' || f.name.endsWith('.pdf')
+            );
+            addLog(`Found ${pdfFiles.length} PDFs in folder`, 'info');
+            
+            for (const file of pdfFiles) {
+                uploadPDF(file);
+            }
+        }
+        
+        async function uploadPDF(file) {
+            const chunkConfig = getChunkingConfig('pdf');
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('chunking', JSON.stringify(chunkConfig));
+            
+            try {
+                const resp = await fetch('/upload/pdf', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (data.error) {
+                    addLog(`Error uploading ${file.name}: ${data.error}`, 'error');
+                } else {
+                    addLog(`Uploaded ${file.name}: ${data.chunks} chunks`, 'success');
+                }
+            } catch (e) {
+                addLog(`Upload failed: ${e.message}`, 'error');
+            }
+        }
+        
+        function handleImageFiles(files) {
+            if (!files || files.length === 0) return;
+            addLog(`Uploading ${files.length} image files...`, 'info');
+            
+            const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+            uploadImages(imageFiles);
+        }
+        
+        function handleImageFolder(files) {
+            if (!files || files.length === 0) return;
+            const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+            const maxFiles = parseInt(document.getElementById('maxImages').value);
+            const limited = imageFiles.slice(0, maxFiles);
+            
+            addLog(`Found ${imageFiles.length} images in folder (using ${limited.length})`, 'info');
+            uploadImages(limited);
+        }
+        
+        async function uploadImages(files) {
+            const describe = document.getElementById('describeImages').checked;
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('describe', describe);
+                
+                try {
+                    const resp = await fetch('/upload/image', { method: 'POST', body: formData });
+                    const data = await resp.json();
+                    if (i % 10 === 0 || i === files.length - 1) {
+                        addLog(`Uploaded ${i + 1}/${files.length} images`, 'info');
+                    }
+                } catch (e) {
+                    addLog(`Image upload failed: ${e.message}`, 'error');
+                }
+            }
+            addLog(`Finished uploading ${files.length} images`, 'success');
+        }
+        
+        function scanImages() {
+            const path = document.getElementById('imagePath').value.trim();
+            if (!path) { alert('Enter a folder path'); return; }
+            
+            ws.send(JSON.stringify({
+                type: 'scan_images',
+                path: path,
+                recursive: document.getElementById('imageRecursive').checked,
+                max_files: parseInt(document.getElementById('maxImages').value),
+                describe: document.getElementById('describeImages').checked
+            }));
+            addLog(`Scanning images: ${path}`, 'info');
+        }
+        
+        function clearCorpus() {
+            if (confirm('Clear all data?')) {
+                ws.send(JSON.stringify({ type: 'clear_corpus' }));
+            }
+        }
+        
+        function removeItem(type, index) {
+            ws.send(JSON.stringify({ type: 'remove_item', item_type: type, index: index }));
+            if (type === 'pdf') corpusData.pdfs.splice(index, 1);
+            else if (type === 'image') corpusData.images.splice(index, 1);
+            else if (type === 'text') corpusData.texts.splice(index, 1);
+            updateDisplay();
+        }
+        
+        function startMining() {
+            ws.send(JSON.stringify({
+                type: 'start_mining',
+                config: {
+                    embedder: document.getElementById('embedder').value,
+                    k_neighbors: parseInt(document.getElementById('kNeighbors').value),
+                    min_cluster_size: parseInt(document.getElementById('minCluster').value),
+                    resolution: parseFloat(document.getElementById('resolution').value),
+                    use_llm: document.getElementById('useLLM').checked,
+                    llm_model: document.getElementById('llmModel').value,
+                    semantic_spread: parseFloat(document.querySelector('input[name="semanticSpread"]:checked').value)
+                }
+            }));
+        }
+        
+        function displayResults(result) {
+            console.log('=== DISPLAY RESULTS CALLED ===');
+            console.log('[displayResults] result keys:', Object.keys(result || {}));
+            console.log('[displayResults] result.metrics keys:', result?.metrics ? Object.keys(result.metrics) : 'NONE');
+            console.log('[displayResults] embedding_coords length:', result?.metrics?.embedding_coords?.length || 'NONE');
+            
+            const container = document.getElementById('archetypesGrid');
+            const archetypes = result.archetypes;
+            
+            if (!archetypes || Object.keys(archetypes).length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No archetypes found</p></div>';
+                return;
+            }
+            
+            document.getElementById('archetypeCount').textContent = `${Object.keys(archetypes).length} archetypes`;
+            document.getElementById('exportGroup').style.display = 'flex';
+            
+            container.innerHTML = Object.entries(archetypes).map(([name, desc], idx) => {
+                const descriptors = Array.isArray(desc) ? desc : [];
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                return `
+                    <div class="archetype-card" style="border-left-color: ${color}">
+                        <div class="archetype-header">
+                            <div class="archetype-name" style="color: ${color}">${name}</div>
+                            <span class="archetype-count" style="background: ${color}">${descriptors.length}</span>
+                        </div>
+                        <div class="descriptor-tags">
+                            ${descriptors.slice(0, 12).map(d => 
+                                `<span class="descriptor-tag">${d}</span>`).join('')}
+                            ${descriptors.length > 12 ? 
+                                `<span class="descriptor-tag more">+${descriptors.length - 12} more</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Store cluster data for visualization
+            clusterData = result;
+            updateClusterViz(result);
+            
+            // Display metrics if available
+            console.log('[UI] Result metrics:', result.metrics ? 'present' : 'missing');
+            if (result.metrics) {
+                console.log('[UI] Calling displayMetrics with', Object.keys(result.archetypes || {}).length, 'archetypes');
+                console.log('[UI] Embedding coords:', result.metrics.embedding_coords?.length || 0);
+                displayMetrics(result.metrics, Object.keys(archetypes));
+            }
+        }
+        
+        // ============================================================
+        // CREATIVE METRICS VISUALIZATION
+        // Constellation, Similarity Matrix, and Quality Metrics
+        // ============================================================
+        
+        let metricsData = null;
+        
+        function displayMetrics(metrics, archetypeNames) {
+            console.log('[displayMetrics] Called with', archetypeNames?.length, 'archetypes');
+            console.log('[displayMetrics] metrics.embedding_coords:', metrics.embedding_coords?.length);
+            
+            metricsData = { metrics, archetypeNames };
+            const corpus = metrics.corpus || {};
+            const perArch = metrics.per_archetype || {};
+            
+            // Update Quality Hero Score
+            const quality = corpus.quality || 0;
+            document.getElementById('qualityScore').textContent = (quality * 100).toFixed(0);
+            
+            // Animate the quality ring
+            const ringFill = document.getElementById('qualityRingFill');
+            const circumference = 175.9; // 2 * PI * 28
+            const offset = circumference * (1 - Math.min(quality, 1));
+            ringFill.style.strokeDashoffset = offset;
+            
+            // Update quality stats
+            document.getElementById('metricCoherence').textContent = ((corpus.coherence || 0) * 100).toFixed(0) + '%';
+            document.getElementById('metricSeparation').textContent = ((corpus.separation || 0) * 100).toFixed(0) + '%';
+            document.getElementById('metricFocus').textContent = ((corpus.focus || 0) * 100).toFixed(0) + '%';
+            document.getElementById('metricBalance').textContent = ((corpus.balance || 0) * 100).toFixed(0) + '%';
+            
+            // Draw 3D embedding visualization
+            setTimeout(() => draw3DEmbeddings(metrics.embedding_coords || [], archetypeNames), 50);
+            
+            // Draw similarity matrix
+            if (metrics.inter_similarity) {
+                drawSimilarityMatrix(metrics.inter_similarity, archetypeNames);
+            }
+            
+            // Render per-archetype metric cards
+            renderArchetypeCards(perArch, archetypeNames);
+        }
+        
+        function renderArchetypeCards(perArch, archetypeNames) {
+            const container = document.getElementById('archetypeMetricsGrid');
+            
+            container.innerHTML = archetypeNames.map((name, idx) => {
+                const m = perArch[name] || { dispersion: 0, leakage: 0, entropy: 0, size: 0 };
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                const shortName = name.length > 14 ? name.slice(0, 14) + '…' : name;
+                
+                return `
+                    <div class="archetype-metric-card" style="border-left-color: ${color}">
+                        <div class="archetype-metric-header">
+                            <div class="archetype-metric-name" title="${name}">${shortName}</div>
+                            <div class="archetype-metric-size">${m.size} items</div>
+                        </div>
+                        <div class="metric-bars">
+                            <div class="metric-bar-row">
+                                <span class="metric-bar-label">D</span>
+                                <div class="metric-bar-track">
+                                    <div class="metric-bar-fill dispersion" style="width: ${Math.min(m.dispersion * 100, 100)}%"></div>
+                                </div>
+                                <span class="metric-bar-value">${(m.dispersion * 100).toFixed(0)}%</span>
+                            </div>
+                            <div class="metric-bar-row">
+                                <span class="metric-bar-label">L</span>
+                                <div class="metric-bar-track">
+                                    <div class="metric-bar-fill leakage" style="width: ${Math.min(m.leakage * 100, 100)}%"></div>
+                                </div>
+                                <span class="metric-bar-value">${(m.leakage * 100).toFixed(0)}%</span>
+                            </div>
+                            <div class="metric-bar-row">
+                                <span class="metric-bar-label">E</span>
+                                <div class="metric-bar-track">
+                                    <div class="metric-bar-fill entropy" style="width: ${Math.min(m.entropy * 100, 100)}%"></div>
+                                </div>
+                                <span class="metric-bar-value">${(m.entropy * 100).toFixed(0)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Three.js 3D embedding visualization
+        let scene3D, camera3D, renderer3D, controls3D, particles3D;
+        let embedding3DInitialized = false;
+        
+        function draw3DEmbeddings(embeddings, archetypeNames) {
+            console.log('[3D] draw3DEmbeddings called with', embeddings?.length, 'embeddings');
+            
+            const container = document.getElementById('embedding3DContainer');
+            if (!container) {
+                console.warn('[3D] Container not found');
+                return;
+            }
+            if (!embeddings || embeddings.length === 0) {
+                console.warn('[3D] No embeddings data');
+                return;
+            }
+            
+            // Clean up previous scene
+            if (renderer3D) {
+                try {
+                    container.removeChild(renderer3D.domElement);
+                    renderer3D.dispose();
+                } catch(e) { console.warn('[3D] Cleanup error:', e); }
+            }
+            
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            console.log('[3D] Container dimensions:', width, 'x', height);
+            
+            if (width < 50 || height < 50) {
+                console.warn('[3D] Container too small, skipping render');
+                return;
+            }
+            
+            try {
+            // Initialize scene
+            scene3D = new THREE.Scene();
+            scene3D.background = new THREE.Color(0x0a0a0f);
+            
+            // Camera
+            camera3D = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+            camera3D.position.set(2, 1.5, 2.5);
+            
+            // Renderer
+            renderer3D = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer3D.setSize(width, height);
+            renderer3D.setPixelRatio(window.devicePixelRatio);
+            container.insertBefore(renderer3D.domElement, container.firstChild);
+            
+            // Controls
+            controls3D = new THREE.OrbitControls(camera3D, renderer3D.domElement);
+            controls3D.enableDamping = true;
+            controls3D.dampingFactor = 0.05;
+            controls3D.autoRotate = true;
+            controls3D.autoRotateSpeed = 0.5;
+            
+            // Build color map
+            const colorMap = {};
+            archetypeNames.forEach((name, idx) => {
+                const hex = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                colorMap[name] = new THREE.Color(hex);
+            });
+            
+            // Create point cloud geometry
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(embeddings.length * 3);
+            const colors = new Float32Array(embeddings.length * 3);
+            
+            embeddings.forEach((e, i) => {
+                positions[i * 3] = e.x;
+                positions[i * 3 + 1] = e.y;
+                positions[i * 3 + 2] = e.z;
+                
+                const color = colorMap[e.archetype] || new THREE.Color(0x888888);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            });
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            // Simple point material (no shaders to avoid CSP issues)
+            const pointsMaterial = new THREE.PointsMaterial({
+                size: 0.12,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.9,
+                sizeAttenuation: true
+            });
+            
+            particles3D = new THREE.Points(geometry, pointsMaterial);
+            scene3D.add(particles3D);
+            
+            // Add centroid spheres for each archetype
+            const centroidsByArch = {};
+            embeddings.forEach(e => {
+                if (!centroidsByArch[e.archetype]) {
+                    centroidsByArch[e.archetype] = { x: 0, y: 0, z: 0, count: 0 };
+                }
+                centroidsByArch[e.archetype].x += e.x;
+                centroidsByArch[e.archetype].y += e.y;
+                centroidsByArch[e.archetype].z += e.z;
+                centroidsByArch[e.archetype].count++;
+            });
+            
+            Object.entries(centroidsByArch).forEach(([arch, c]) => {
+                const cx = c.x / c.count;
+                const cy = c.y / c.count;
+                const cz = c.z / c.count;
+                
+                // Centroid sphere
+                const sphereGeo = new THREE.SphereGeometry(0.06, 16, 16);
+                const color = colorMap[arch] || new THREE.Color(0x888888);
+                const sphereMat = new THREE.MeshBasicMaterial({ 
+                    color: color,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+                sphere.position.set(cx, cy, cz);
+                scene3D.add(sphere);
+                
+                // Wireframe hull hint
+                const wireGeo = new THREE.SphereGeometry(0.25, 8, 6);
+                const wireMat = new THREE.MeshBasicMaterial({
+                    color: color,
+                    wireframe: true,
+                    transparent: true,
+                    opacity: 0.15
+                });
+                const wire = new THREE.Mesh(wireGeo, wireMat);
+                wire.position.set(cx, cy, cz);
+                scene3D.add(wire);
+            });
+            
+            // Add subtle grid
+            const gridHelper = new THREE.GridHelper(2, 10, 0x333333, 0x222222);
+            gridHelper.position.y = -1;
+            scene3D.add(gridHelper);
+            
+            // Update legend
+            const legendEl = document.getElementById('embedding3DLegend');
+            legendEl.innerHTML = archetypeNames.map((name, idx) => {
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                const count = embeddings.filter(e => e.archetype === name).length;
+                return `<span style="color:${color}">●</span> ${name.slice(0, 10)}${name.length > 10 ? '…' : ''} (${count})`;
+            }).join(' &nbsp; ');
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                controls3D.update();
+                renderer3D.render(scene3D, camera3D);
+            }
+            animate();
+            
+            embedding3DInitialized = true;
+            console.log('[3D] Visualization initialized successfully');
+            
+            } catch(err) {
+                console.error('[3D] Error creating visualization:', err);
+            }
+        }
+        
+        function drawSimilarityMatrix(interSimilarity, archetypeNames) {
+            const canvas = document.getElementById('similarityMatrix');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const container = canvas.parentElement;
+            const size = Math.min(container.clientWidth - 10, container.clientHeight - 30);
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = size * dpr;
+            canvas.height = size * dpr;
+            canvas.style.width = size + 'px';
+            canvas.style.height = size + 'px';
+            ctx.scale(dpr, dpr);
+            
+            const n = archetypeNames.length;
+            if (n === 0) return;
+            
+            const cellSize = size / n;
+            
+            // Draw cells
+            archetypeNames.forEach((name_i, i) => {
+                archetypeNames.forEach((name_j, j) => {
+                    const sim = interSimilarity[name_i]?.[name_j] || 0;
+                    const x = j * cellSize;
+                    const y = i * cellSize;
+                    
+                    // Color gradient from dark purple (low) to bright purple (high)
+                    const intensity = Math.pow(sim, 0.7);  // Gamma correction for visibility
+                    
+                    if (i === j) {
+                        // Diagonal: always full
+                        ctx.fillStyle = hexToRgba(CLUSTER_COLORS[i % CLUSTER_COLORS.length], 0.8);
+                    } else {
+                        // Off-diagonal: gradient based on similarity
+                        const r = Math.round(139 + (194 - 139) * intensity);
+                        const g = Math.round(92 + (166 - 92) * intensity);
+                        const b = Math.round(246 + (254 - 246) * intensity);
+                        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.2 + intensity * 0.6})`;
+                    }
+                    
+                    ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
+                    
+                    // Add similarity value for larger matrices
+                    if (n <= 8 && i !== j && cellSize > 18) {
+                        ctx.fillStyle = intensity > 0.5 ? '#fff' : 'rgba(255,255,255,0.5)';
+                        ctx.font = `${Math.max(8, cellSize * 0.35)}px Inter, sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText((sim * 100).toFixed(0), x + cellSize / 2, y + cellSize / 2);
+                    }
+                });
+            });
+            
+            // Draw grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= n; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * cellSize, 0);
+                ctx.lineTo(i * cellSize, size);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * cellSize);
+                ctx.lineTo(size, i * cellSize);
+                ctx.stroke();
+            }
+        }
+        
+        function updateClusterViz(result) {
+            const stats = result.stats || {};
+            
+            document.getElementById('clusterNodes').textContent = stats.total_items || 0;
+            document.getElementById('clusterCount').textContent = stats.clusters || Object.keys(result.archetypes || {}).length;
+            document.getElementById('clusterEdges').textContent = stats.edges || '?';
+            
+            // Build legend
+            const legend = document.getElementById('clusterLegend');
+            const archetypes = Object.keys(result.archetypes || {});
+            
+            legend.innerHTML = archetypes.map((name, idx) => `
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: ${CLUSTER_COLORS[idx % CLUSTER_COLORS.length]}"></div>
+                    <span>${name.length > 20 ? name.slice(0, 20) + '...' : name}</span>
+                </div>
+            `).join('');
+            
+            drawClusterViz();
+        }
+        
+        function drawClusterViz() {
+            const canvas = document.getElementById('clusterCanvas');
+            if (!canvas) return;
+            
+            const container = canvas.parentElement;
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = container.clientWidth || 400;
+            canvas.height = container.clientHeight || 300;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // Clear
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(0, 0, w, h);
+            
+            if (!currentResults || !currentResults.archetypes) {
+                ctx.fillStyle = '#9ca3af';
+                ctx.font = '14px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Run mining to see cluster visualization', w/2, h/2);
+                return;
+            }
+            
+            const graph = currentResults.graph;
+            const archetypes = Object.keys(currentResults.archetypes);
+            
+            // If we have graph data, use force-directed layout
+            if (graph && graph.nodes && graph.nodes.length > 0) {
+                drawForceGraph(ctx, w, h, graph, archetypes);
+            } else {
+                // Fallback to simple cluster view
+                drawSimpleClusters(ctx, w, h, archetypes);
+            }
+        }
+        
+        function drawForceGraph(ctx, w, h, graph, archetypeNames) {
+            const nodes = graph.nodes;
+            const edges = graph.edges;
+            
+            // Create cluster color map
+            const clusterColors = {};
+            archetypeNames.forEach((name, idx) => {
+                clusterColors[name] = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+            });
+            
+            // Initialize node positions with force-directed simulation
+            const nodeMap = {};
+            const margin = 40;
+            
+            // Group nodes by cluster for initial positioning
+            const clusterGroups = {};
+            nodes.forEach(node => {
+                if (!clusterGroups[node.cluster]) clusterGroups[node.cluster] = [];
+                clusterGroups[node.cluster].push(node);
+            });
+            
+            // Position clusters in a circle, nodes within cluster with jitter
+            const numClusters = Object.keys(clusterGroups).length;
+            const clusterRadius = Math.min(w, h) * 0.32;
+            const centerX = w / 2;
+            const centerY = h / 2;
+            
+            Object.entries(clusterGroups).forEach(([cluster, clusterNodes], clusterIdx) => {
+                const clusterAngle = (clusterIdx / numClusters) * Math.PI * 2 - Math.PI / 2;
+                const clusterX = centerX + Math.cos(clusterAngle) * clusterRadius;
+                const clusterY = centerY + Math.sin(clusterAngle) * clusterRadius;
+                
+                const nodeSpread = Math.min(50, 20 + clusterNodes.length * 2);
+                
+                clusterNodes.forEach((node, nodeIdx) => {
+                    // Spiral layout within cluster
+                    const spiralAngle = nodeIdx * 0.7;
+                    const spiralRadius = 8 + nodeIdx * 3;
+                    
+                    nodeMap[node.id] = {
+                        x: clusterX + Math.cos(spiralAngle) * Math.min(spiralRadius, nodeSpread),
+                        y: clusterY + Math.sin(spiralAngle) * Math.min(spiralRadius, nodeSpread),
+                        cluster: node.cluster,
+                        color: clusterColors[node.cluster] || '#888888'
+                    };
+                });
+            });
+            
+            // Simple force simulation (a few iterations)
+            for (let iter = 0; iter < 50; iter++) {
+                // Repulsion between all nodes
+                Object.values(nodeMap).forEach(n1 => {
+                    Object.values(nodeMap).forEach(n2 => {
+                        if (n1 === n2) return;
+                        const dx = n1.x - n2.x;
+                        const dy = n1.y - n2.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) + 0.1;
+                        if (dist < 30) {
+                            const force = (30 - dist) * 0.05;
+                            n1.x += (dx / dist) * force;
+                            n1.y += (dy / dist) * force;
+                        }
+                    });
+                });
+                
+                // Attraction along edges
+                edges.forEach(edge => {
+                    const s = nodeMap[edge.source];
+                    const t = nodeMap[edge.target];
+                    if (!s || !t) return;
+                    
+                    const dx = t.x - s.x;
+                    const dy = t.y - s.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) + 0.1;
+                    
+                    if (dist > 20) {
+                        const force = (dist - 20) * 0.01;
+                        s.x += (dx / dist) * force;
+                        s.y += (dy / dist) * force;
+                        t.x -= (dx / dist) * force;
+                        t.y -= (dy / dist) * force;
+                    }
+                });
+                
+                // Keep nodes in bounds
+                Object.values(nodeMap).forEach(n => {
+                    n.x = Math.max(margin, Math.min(w - margin, n.x));
+                    n.y = Math.max(margin, Math.min(h - margin, n.y));
+                });
+            }
+            
+            // Draw edges
+            ctx.lineWidth = 0.5;
+            edges.forEach(edge => {
+                const s = nodeMap[edge.source];
+                const t = nodeMap[edge.target];
+                if (!s || !t) return;
+                
+                // Color by source cluster with low alpha
+                ctx.strokeStyle = hexToRgba(s.color, 0.15);
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(t.x, t.y);
+                ctx.stroke();
+            });
+            
+            // Draw nodes
+            Object.values(nodeMap).forEach(node => {
+                // Glow
+                const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 8);
+                gradient.addColorStop(0, hexToRgba(node.color, 0.25));
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Node
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = node.color;
+                ctx.fill();
+            });
+            
+            // Draw cluster labels
+            Object.entries(clusterGroups).forEach(([cluster, clusterNodes], clusterIdx) => {
+                // Find cluster centroid
+                let cx = 0, cy = 0;
+                clusterNodes.forEach(node => {
+                    cx += nodeMap[node.id].x;
+                    cy += nodeMap[node.id].y;
+                });
+                cx /= clusterNodes.length;
+                cy /= clusterNodes.length;
+                
+                const color = clusterColors[cluster] || '#888888';
+                
+                // Label background
+                const label = cluster.length > 15 ? cluster.slice(0, 15) + '...' : cluster;
+                ctx.font = '10px Inter, sans-serif';
+                const textWidth = ctx.measureText(label).width;
+                
+                ctx.fillStyle = 'rgba(10, 10, 15, 0.8)';
+                ctx.fillRect(cx - textWidth/2 - 4, cy - 18, textWidth + 8, 14);
+                
+                // Label text
+                ctx.fillStyle = color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, cx, cy - 11);
+                
+                // Node count
+                ctx.fillStyle = '#666';
+                ctx.font = '8px Inter, sans-serif';
+                ctx.fillText(`${clusterNodes.length}`, cx, cy + 2);
+            });
+        }
+        
+        function drawSimpleClusters(ctx, w, h, archetypeNames) {
+            // Fallback when no graph data available
+            const numClusters = archetypeNames.length;
+            const centerX = w / 2;
+            const centerY = h / 2;
+            const radius = Math.min(w, h) * 0.3;
+            
+            archetypeNames.forEach((name, idx) => {
+                const angle = (idx / numClusters) * Math.PI * 2 - Math.PI / 2;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                
+                // Draw simple circle
+                ctx.beginPath();
+                ctx.arc(x, y, 25, 0, Math.PI * 2);
+                ctx.fillStyle = hexToRgba(color, 0.25);
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Label
+                ctx.fillStyle = color;
+                ctx.font = '10px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                const label = name.length > 12 ? name.slice(0, 12) + '...' : name;
+                ctx.fillText(label, x, y + 35);
+            });
+        }
+        
+        function exportJSON() {
+            if (!currentResults) return;
+            const blob = new Blob([JSON.stringify(currentResults, null, 2)], {type: 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `archetypes_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+        }
+        
+        function copyToClipboard() {
+            if (!currentResults) return;
+            navigator.clipboard.writeText(JSON.stringify(currentResults.archetypes, null, 2));
+            addLog('Copied archetypes JSON to clipboard', 'success');
+        }
+        
+        async function sendToExplorer() {
+            if (!currentResults) return;
+            
+            // Store in localStorage for fallback
+            localStorage.setItem('miner_archetypes', JSON.stringify(currentResults.archetypes));
+            
+            // Export to file via API (for Delyrism to read)
+            try {
+                const resp = await fetch('/api/export-to-delyrism', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ archetypes: currentResults.archetypes })
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    addLog(`Exported ${result.count} archetypes to Delyrism`, 'success');
+                    
+                    // Visual feedback
+                    const btn = document.querySelector('[onclick="sendToExplorer()"]');
+                    if (btn) {
+                        btn.textContent = '✅ Exported!';
+                        btn.style.background = 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)';
+                        setTimeout(() => {
+                            btn.textContent = 'Open in Explorer';
+                            btn.style.background = '';
+                        }, 2000);
+                    }
+                } else {
+                    addLog('Export failed: ' + result.error, 'error');
+                }
+            } catch (e) {
+                addLog('Export API failed: ' + e.message, 'error');
+            }
+            
+            // Send to parent Streamlit via postMessage (for iframe embed)
+            try {
+                window.parent.postMessage({
+                    type: 'egregore_archetypes',
+                    archetypes: currentResults.archetypes,
+                    stats: currentResults.stats,
+                    metrics: currentResults.metrics
+                }, '*');
+            } catch (e) {
+                // Ignore if not in iframe
+            }
+        }
+        
+        // Handle window resize for cluster viz and 3D embeddings
+        window.addEventListener('resize', () => {
+            if (document.getElementById('results-clusters').classList.contains('active')) {
+                drawClusterViz();
+            }
+            if (document.getElementById('results-metrics').classList.contains('active') && currentResults?.metrics) {
+                const archetypeNames = Object.keys(currentResults.archetypes || {});
+                draw3DEmbeddings(currentResults.metrics.embedding_coords || [], archetypeNames);
+                if (currentResults.metrics.inter_similarity) {
+                    drawSimilarityMatrix(currentResults.metrics.inter_similarity, archetypeNames);
+                }
+            }
+            initSpectralCanvas();
+        });
+        
+        // Spectral interference animation
+        let spectralAnimationId = null;
+        
+        function initSpectralCanvas() {
+            const canvas = document.getElementById('spectralCanvas');
+            if (!canvas) return;
+            
+            const panel = canvas.parentElement;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = panel.clientWidth * dpr;
+            canvas.height = panel.clientHeight * dpr;
+            canvas.style.width = panel.clientWidth + 'px';
+            canvas.style.height = panel.clientHeight + 'px';
+            
+            if (!spectralAnimationId) {
+                animateSpectral();
+            }
+        }
+        
+        function animateSpectral() {
+            const canvas = document.getElementById('spectralCanvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            const dpr = window.devicePixelRatio || 1;
+            const time = performance.now() * 0.001;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            // Spectral line parameters
+            const numWaves = 5;
+            const colors = [
+                'rgba(194, 166, 254, 0.3)',  // purple
+                'rgba(161, 196, 253, 0.25)', // blue
+                'rgba(139, 92, 246, 0.2)',   // violet
+                'rgba(99, 102, 241, 0.15)',  // indigo
+                'rgba(168, 85, 247, 0.2)'    // purple-pink
+            ];
+            
+            for (let i = 0; i < numWaves; i++) {
+                const freq1 = 0.003 + i * 0.001;
+                const freq2 = 0.005 + i * 0.0008;
+                const phase1 = time * (0.3 + i * 0.1);
+                const phase2 = time * (0.2 + i * 0.15) + Math.PI * 0.5;
+                const amplitude = 30 + i * 15;
+                const yOffset = h * (0.2 + i * 0.15);
+                
+                ctx.beginPath();
+                ctx.strokeStyle = colors[i % colors.length];
+                ctx.lineWidth = (1.5 + Math.sin(time + i) * 0.5) * dpr;
+                
+                for (let x = 0; x < w; x += 2) {
+                    // Interference pattern: sum of two sine waves
+                    const wave1 = Math.sin(x * freq1 + phase1);
+                    const wave2 = Math.sin(x * freq2 + phase2);
+                    const interference = (wave1 + wave2) * 0.5;
+                    
+                    // Add subtle harmonic
+                    const harmonic = Math.sin(x * freq1 * 3 + phase1 * 2) * 0.15;
+                    
+                    const y = yOffset + (interference + harmonic) * amplitude * dpr;
+                    
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                
+                // Draw interference nodes (bright spots where waves constructively interfere)
+                for (let x = 0; x < w; x += 80) {
+                    const wave1 = Math.sin(x * freq1 + phase1);
+                    const wave2 = Math.sin(x * freq2 + phase2);
+                    const interference = (wave1 + wave2) * 0.5;
+                    
+                    if (Math.abs(interference) > 0.8) {
+                        const y = yOffset + interference * amplitude * dpr;
+                        const nodeSize = (2 + Math.abs(interference) * 3) * dpr;
+                        
+                        const gradient = ctx.createRadialGradient(x, y, 0, x, y, nodeSize * 2);
+                        gradient.addColorStop(0, colors[i % colors.length].replace('0.', '0.6'));
+                        gradient.addColorStop(1, 'transparent');
+                        
+                        ctx.beginPath();
+                        ctx.fillStyle = gradient;
+                        ctx.arc(x, y, nodeSize * 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            // Add subtle vertical scanning line
+            const scanX = ((time * 30) % (w / dpr)) * dpr;
+            const scanGradient = ctx.createLinearGradient(scanX - 20 * dpr, 0, scanX + 20 * dpr, 0);
+            scanGradient.addColorStop(0, 'transparent');
+            scanGradient.addColorStop(0.5, 'rgba(194, 166, 254, 0.08)');
+            scanGradient.addColorStop(1, 'transparent');
+            ctx.fillStyle = scanGradient;
+            ctx.fillRect(scanX - 20 * dpr, 0, 40 * dpr, h);
+            
+            spectralAnimationId = requestAnimationFrame(animateSpectral);
+        }
+        
+        // Initialize spectral animation
+        setTimeout(initSpectralCanvas, 100);
+        
+        connect();
+    </script>
+</body>
+</html>

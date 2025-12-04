@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+websockets
+numpy
+torch
+transformers
+sentence-transformers
+scikit-learn
+Pillow
+pymupdf
+httpx
+pydantic
+python-multipart
