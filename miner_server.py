@@ -906,7 +906,7 @@ async def run_mining_pipeline(job_id: str, config: Dict):
             EnhancedArchetypeMiner, LLMArchetypeRefiner,
             TextChunk, MinerCorpus
         )
-        from delyrism import TextEmbedder
+        from text_embedder import TextEmbedder
         
         # Initialize embedder (handle cloudflare variants)
         embedder_type = config.get("embedder", "cloudflare")

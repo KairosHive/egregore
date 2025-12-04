@@ -38,6 +38,32 @@ except ImportError:
     pdfplumber = None
 
 
+def _load_cloudflare_credentials() -> Tuple[str, str]:
+    """Load Cloudflare credentials from environment or secrets.toml."""
+    import os
+    
+    account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+    api_token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+    
+    if not account_id or not api_token:
+        try:
+            try:
+                import tomli
+            except ImportError:
+                import tomllib as tomli  # Python 3.11+ built-in
+            secrets_path = Path(__file__).parent / ".streamlit" / "secrets.toml"
+            if secrets_path.exists():
+                with open(secrets_path, "rb") as f:
+                    secrets = tomli.load(f)
+                cf = secrets.get("cloudflare", {})
+                account_id = account_id or cf.get("account_id", "")
+                api_token = api_token or cf.get("api_token", "")
+        except Exception as e:
+            print(f"[Cloudflare] Warning: Could not read secrets.toml: {e}")
+    
+    return account_id, api_token
+
+
 # ============================================================
 # Data structures
 # ============================================================
@@ -405,19 +431,21 @@ class VisionDescriber:
             Text description of the image
         """
         import requests
-        import os
         
         # Check cache
         if use_cache and image_path in self._cache:
             return self._cache[image_path]
         
-        account_id = self.cf_account or os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
-        api_token = self.cf_token or os.environ.get("CLOUDFLARE_API_TOKEN", "")
+        # Load credentials from env or secrets.toml
+        env_account, env_token = _load_cloudflare_credentials()
+        account_id = self.cf_account or env_account
+        api_token = self.cf_token or env_token
         
         if not account_id or not api_token:
             raise ValueError(
                 "Cloudflare credentials not configured. "
-                "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN environment variables."
+                "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN environment variables "
+                "or add them to .streamlit/secrets.toml"
             )
         
         # Convert image to base64
@@ -620,13 +648,18 @@ class LLMArchetypeRefiner:
     def _call_cloudflare(self, messages: List[Dict], max_tokens: int = 2048) -> str:
         """Call Cloudflare Workers AI."""
         import requests
-        import os
         
-        account_id = self.cf_account or os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
-        api_token = self.cf_token or os.environ.get("CLOUDFLARE_API_TOKEN", "")
+        # Load credentials from env or secrets.toml
+        env_account, env_token = _load_cloudflare_credentials()
+        account_id = self.cf_account or env_account
+        api_token = self.cf_token or env_token
         
         if not account_id or not api_token:
-            raise ValueError("Cloudflare credentials not configured")
+            raise ValueError(
+                "Cloudflare credentials not configured. "
+                "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN environment variables "
+                "or add them to .streamlit/secrets.toml"
+            )
         
         url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{self.model}"
         
@@ -922,6 +955,12 @@ JSON only."""
                 print(f"Refinement pass returned insufficient archetypes, keeping originals")
                 return archetypes
                 
+        except ValueError as e:
+            # Credential/config errors should be fatal
+            if "credentials" in str(e).lower() or "not configured" in str(e).lower():
+                raise
+            print(f"LLM refinement pass failed: {e}, keeping original archetypes")
+            return archetypes
         except Exception as e:
             print(f"LLM refinement pass failed: {e}, keeping original archetypes")
             return archetypes
@@ -1014,6 +1053,15 @@ JSON only."""
                         raise ValueError("No descriptors found in LLM response")
                 else:
                     raise ValueError("Empty result from LLM (JSON parse failed)")
+            except ValueError as e:
+                # Credential/config errors should be fatal
+                if "credentials" in str(e).lower() or "not configured" in str(e).lower():
+                    raise
+                print(f"Error generating archetype for cluster {cid}: {e}")
+                # Fallback for other errors
+                if concepts:
+                    name = f"{concepts[0]} / {concepts[1]}".upper() if len(concepts) >= 2 else concepts[0].upper()
+                    archetypes[name] = concepts[:10]
             except Exception as e:
                 print(f"Error generating archetype for cluster {cid}: {e}")
                 # Fallback
