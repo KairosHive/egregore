@@ -1030,9 +1030,18 @@
             text-align: center;
         }
         
-        #similarityMatrix {
+        .similarity-canvas-wrapper {
             flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             min-height: 0;
+        }
+        
+        #similarityMatrix {
+            max-width: 100%;
+            max-height: 100%;
+            aspect-ratio: 1;
         }
         
         /* Per-Archetype Metrics Cards */
@@ -1177,6 +1186,703 @@
             font-size: 0.5rem;
         }
         
+        /* ================================================
+           TOPOLOGY PANEL - Gravitational Fields, Gradients, Metrics
+           ================================================ */
+        
+        .topology-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: visible;
+            padding-top: 5px;
+        }
+        
+        /* Gravity Well Visualization */
+        .gravity-section {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+            overflow: visible;
+            position: relative;
+        }
+        
+        .topology-section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .topology-section-icon {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+        
+        .topology-section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .topology-section-subtitle {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            margin-left: auto;
+        }
+        
+        .gravity-canvas-container {
+            position: relative;
+            height: 280px;
+            background: radial-gradient(ellipse at center, rgba(15, 10, 30, 0.95) 0%, rgba(5, 5, 10, 1) 100%);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        #gravityCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .gravity-legend {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(10, 10, 12, 0.85);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 0.55rem;
+            color: var(--text-muted);
+        }
+        
+        /* Gradient Flow Visualization */
+        .gradient-flow-container {
+            position: relative;
+            height: 200px;
+            background: radial-gradient(ellipse at center, rgba(10, 15, 25, 0.95) 0%, rgba(5, 5, 10, 1) 100%);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        #gradientCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Topology Metrics Cards */
+        .topology-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            overflow: visible;
+            position: relative;
+        }
+        
+        .topology-metric-card {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+            text-align: center;
+            transition: all 0.2s ease;
+            position: relative;
+            cursor: help;
+            z-index: 1;
+        }
+        
+        .topology-metric-card:hover {
+            border-color: rgba(139, 92, 246, 0.4);
+            background: rgba(139, 92, 246, 0.1);
+            z-index: 100;
+        }
+        
+        .topology-metric-card:hover .metric-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        .metric-tooltip {
+            position: absolute;
+            left: 50%;
+            top: calc(100% + 8px);
+            transform: translateX(-50%) translateY(-5px);
+            background: rgba(15, 10, 30, 0.98);
+            border: 1px solid rgba(139, 92, 246, 0.5);
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            width: 180px;
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.15s ease;
+            z-index: 9999;
+            pointer-events: none;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+            text-align: left;
+        }
+        
+        .metric-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-bottom-color: rgba(139, 92, 246, 0.5);
+        }
+        
+        .metric-tooltip-title {
+            color: var(--accent-primary);
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+            font-size: 0.65rem;
+        }
+        
+        .topology-metric-value {
+            font-size: 1.4rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .topology-metric-label {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 0.25rem;
+        }
+        
+        .topology-metric-sublabel {
+            font-size: 0.5rem;
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+        
+        /* ================================================
+           VISUALS TAB - AI Generated Archetype Art
+           ================================================ */
+        
+        .visuals-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            height: 100%;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+        
+        .visuals-config-section,
+        .visuals-selection-section,
+        .visuals-style-section,
+        .visuals-generate-section,
+        .visuals-gallery-section {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+        }
+        
+        .api-key-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .api-key-input {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-primary);
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .api-key-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+        
+        .api-key-hint {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+        
+        .api-key-hint a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+        
+        .api-key-hint a:hover {
+            text-decoration: underline;
+        }
+        
+        .archetype-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+        }
+        
+        .archetype-chip {
+            padding: 0.35rem 0.65rem;
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        
+        .archetype-chip:hover {
+            background: rgba(139, 92, 246, 0.25);
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+        
+        .archetype-chip.selected {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-color: var(--accent-primary);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .empty-chip {
+            color: var(--text-muted);
+            font-size: 0.65rem;
+            font-style: italic;
+        }
+        
+        .visuals-selected-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        
+        .style-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .style-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .style-option:hover {
+            border-color: rgba(139, 92, 246, 0.4);
+        }
+        
+        .style-option input[type="radio"] {
+            accent-color: var(--accent-primary);
+        }
+        
+        .style-option input[type="radio"]:checked + .style-option-label {
+            color: var(--accent-primary);
+        }
+        
+        .style-option-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+        
+        .visuals-generate-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+        }
+        
+        .generate-vision-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.85rem;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .generate-vision-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+        }
+        
+        .generate-vision-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .generate-vision-btn.loading .generate-icon {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .generate-status {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            min-height: 1.2em;
+        }
+        
+        .generate-status.error {
+            color: #ef4444;
+        }
+        
+        .generate-status.success {
+            color: #10b981;
+        }
+        
+        .visuals-gallery {
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .visuals-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+        
+        .visuals-placeholder-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+            opacity: 0.5;
+        }
+        
+        .visuals-placeholder p {
+            font-size: 0.7rem;
+            max-width: 250px;
+            line-height: 1.5;
+        }
+        
+        .vision-card {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .vision-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: rgba(139, 92, 246, 0.1);
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .vision-archetypes {
+            display: flex;
+            gap: 0.3rem;
+        }
+        
+        .vision-archetype-tag {
+            padding: 0.2rem 0.5rem;
+            background: rgba(139, 92, 246, 0.2);
+            border-radius: 12px;
+            font-size: 0.55rem;
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .vision-style-tag {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+        }
+        
+        .vision-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.2rem;
+        }
+        
+        .vision-model-tag {
+            font-size: 0.5rem;
+            color: var(--accent-primary);
+            text-transform: capitalize;
+        }
+        
+        .vision-image-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .vision-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .vision-prompt {
+            padding: 0.75rem 1rem;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            border-top: 1px solid var(--border);
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        .vision-actions {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        .vision-action-btn {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.6rem;
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .vision-action-btn:hover {
+            background: rgba(139, 92, 246, 0.25);
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+        
+        /* Model Selection */
+        .visuals-model-section {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+        }
+        
+        .model-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .model-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 0.75rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .model-option:hover {
+            border-color: rgba(139, 92, 246, 0.4);
+            background: rgba(139, 92, 246, 0.1);
+        }
+        
+        .model-option input[type="radio"] {
+            accent-color: var(--accent-primary);
+        }
+        
+        .model-option input[type="radio"]:checked + .model-option-content .model-name {
+            color: var(--accent-primary);
+        }
+        
+        .model-option-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+        }
+        
+        .model-name {
+            font-size: 0.7rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .model-desc {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+        }
+        
+        /* Semantic Bridges Section */
+        .bridges-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .bridge-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .bridge-item:hover {
+            border-color: rgba(139, 92, 246, 0.3);
+            background: rgba(139, 92, 246, 0.1);
+        }
+        
+        .bridge-descriptor {
+            font-size: 0.7rem;
+            color: var(--text-primary);
+            flex: 1;
+        }
+        
+        .bridge-archetypes {
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .bridge-archetype-tag {
+            font-size: 0.5rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            background: rgba(139, 92, 246, 0.2);
+            color: var(--panel-purple-text);
+        }
+        
+        .bridge-strength {
+            font-size: 0.6rem;
+            color: var(--accent-secondary);
+            font-weight: 500;
+        }
+        
+        /* Geodesic Distance Matrix */
+        .geodesic-container {
+            display: flex;
+            gap: 1rem;
+            align-items: stretch;
+        }
+        
+        .geodesic-matrix-wrapper {
+            flex: 1;
+            position: relative;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 0.5rem;
+        }
+        
+        .geodesic-labels {
+            position: absolute;
+            font-size: 0.5rem;
+            color: var(--text-muted);
+        }
+        
+        #geodesicCanvas {
+            width: 100%;
+            height: 200px;
+            border-radius: 6px;
+        }
+        
+        .geodesic-stats {
+            width: 140px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+        
+        .geodesic-stat {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 0.6rem;
+            text-align: center;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+        
+        .geodesic-stat:hover {
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+        
+        .geodesic-stat-value {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent-secondary);
+            word-break: break-all;
+        }
+        
+        .geodesic-stat-label {
+            font-size: 0.5rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 0.2rem;
+        }
+        
+        .geodesic-color-scale {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.5rem;
+            color: var(--text-muted);
+        }
+        
+        .geodesic-scale-bar {
+            flex: 1;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #14b8a6, #3b82f6, #8b5cf6, #1e1b4b);
+        }
+
         /* Archetype Cards */
         .archetypes-grid {
             display: grid;
@@ -1185,6 +1891,9 @@
             overflow-y: auto;
             padding: 1rem;
             padding-right: 0.5rem;
+            position: relative;
+            min-height: 400px;
+            height: 100%;
         }
         
         .archetype-card {
@@ -1308,22 +2017,87 @@
             text-align: center;
             color: var(--text-muted);
             padding: 3rem 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
         }
         
         .empty-state-icon {
-            width: 48px;
-            height: 48px;
-            margin: 0 auto 1rem;
-            opacity: 0.3;
-            background: var(--bg-tertiary);
+            width: 250px;
+            height: 250px;
+            margin: 0 auto 2rem;
+            position: relative;
+        }
+        
+        .spiral-container {
+            width: 250px;
+            height: 250px;
+            position: relative;
+        }
+        
+        .spiral-particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background: var(--accent-primary);
+            box-shadow: 0 0 6px var(--accent-primary);
+        }
+        
+        /* Elegant comet-like trail effect */
+        .spiral-particle-trail {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            will-change: transform, opacity;
+        }
+        
+        @keyframes spiralOrbit {
+            0% { transform: rotate(0deg) translateX(var(--orbit-radius)) rotate(0deg); }
+            100% { transform: rotate(360deg) translateX(var(--orbit-radius)) rotate(-360deg); }
+        }
+        
+        @keyframes breathe {
+            0%, 100% { opacity: var(--base-opacity); filter: blur(var(--base-blur)); }
+            50% { opacity: calc(var(--base-opacity) * 1.4); filter: blur(calc(var(--base-blur) * 0.7)); }
+        }
+        
+        @keyframes spiralPulse {
+            0%, 100% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+        
+        .spiral-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            margin: -8px 0 0 -8px;
+            background: var(--accent-secondary);
+            border-radius: 50%;
+            box-shadow: 0 0 20px var(--accent-secondary), 0 0 40px var(--accent-primary);
+            animation: spiralPulse 2s ease-in-out infinite;
         }
         
         .empty-state-text {
-            font-size: 0.85rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            background: linear-gradient(120deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-top: 1rem;
         }
         
         /* Export Section */
@@ -1768,6 +2542,8 @@
                     <div class="results-tab active" onclick="switchResultsTab('archetypes')">Archetypes</div>
                     <div class="results-tab" onclick="switchResultsTab('clusters')">Clusters</div>
                     <div class="results-tab" onclick="switchResultsTab('metrics')">Metrics</div>
+                    <div class="results-tab" onclick="switchResultsTab('topology')">Topology</div>
+                    <div class="results-tab" onclick="switchResultsTab('visuals')">Visuals</div>
                 </div>
                 
                 <div class="panel-content" style="padding: 0.75rem;">
@@ -1776,12 +2552,12 @@
                         <div class="archetypes-grid" id="archetypesGrid">
                             <div class="empty-state">
                                 <div class="empty-state-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
-                                        <circle cx="12" cy="12" r="10"/>
-                                        <path d="M12 6v6l4 2"/>
-                                    </svg>
+                                    <div class="spiral-container" id="spiralContainer">
+                                        <div class="spiral-center"></div>
+                                        <!-- Particles generated by JS -->
+                                    </div>
                                 </div>
-                                <p>Run builder to discover archetypes</p>
+                                <p class="empty-state-text">Create Your Egregore!</p>
                             </div>
                         </div>
                     </div>
@@ -1860,12 +2636,292 @@
                                 </div>
                                 <div class="similarity-panel">
                                     <div class="similarity-title">Inter-Archetype Affinity</div>
-                                    <canvas id="similarityMatrix"></canvas>
+                                    <div class="similarity-canvas-wrapper">
+                                        <canvas id="similarityMatrix"></canvas>
+                                    </div>
                                 </div>
                             </div>
                             
                             <!-- Per-Archetype Metric Cards -->
                             <div class="archetype-metrics-grid" id="archetypeMetricsGrid"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Topology Tab - Gravitational Fields, Gradient Flow, Topology Metrics -->
+                    <div id="results-topology" class="results-content">
+                        <div class="topology-container">
+                            
+                            <!-- Topology Metrics Overview -->
+                            <div class="gravity-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">📐</div>
+                                    <div class="topology-section-title">Topology Metrics</div>
+                                    <div class="topology-section-subtitle">Structural Properties</div>
+                                </div>
+                                <div class="topology-metrics-grid" id="topologyMetricsGrid">
+                                    <div class="topology-metric-card">
+                                        <div class="metric-tooltip">
+                                            <div class="metric-tooltip-title">Total Mass</div>
+                                            Total number of descriptors across all archetypes. Higher mass = richer semantic space with more conceptual density.
+                                        </div>
+                                        <div class="topology-metric-value" id="topoTotalMass">—</div>
+                                        <div class="topology-metric-label">Total Mass</div>
+                                        <div class="topology-metric-sublabel">Σ descriptors</div>
+                                    </div>
+                                    <div class="topology-metric-card">
+                                        <div class="metric-tooltip">
+                                            <div class="metric-tooltip-title">Curvature</div>
+                                            How "warped" the meaning space is. High curvature means descriptors are unevenly distributed around centroids. Low = uniform spherical clusters.
+                                        </div>
+                                        <div class="topology-metric-value" id="topoMeanCurvature">—</div>
+                                        <div class="topology-metric-label">Curvature</div>
+                                        <div class="topology-metric-sublabel">meaning warp</div>
+                                    </div>
+                                    <div class="topology-metric-card">
+                                        <div class="metric-tooltip">
+                                            <div class="metric-tooltip-title">Connectivity</div>
+                                            Average similarity between different archetypes. High = archetypes overlap and meanings blend. Low = well-separated distinct concepts.
+                                        </div>
+                                        <div class="topology-metric-value" id="topoConnectivity">—</div>
+                                        <div class="topology-metric-label">Connectivity</div>
+                                        <div class="topology-metric-sublabel">graph density</div>
+                                    </div>
+                                    <div class="topology-metric-card">
+                                        <div class="metric-tooltip">
+                                            <div class="metric-tooltip-title">Semantic Bridges</div>
+                                            Descriptors that connect two archetypes. These are conceptual "portals" — words that carry meaning across domains.
+                                        </div>
+                                        <div class="topology-metric-value" id="topoNumBridges">—</div>
+                                        <div class="topology-metric-label">Bridges</div>
+                                        <div class="topology-metric-sublabel">semantic portals</div>
+                                    </div>
+                                    <div class="topology-metric-card">
+                                        <div class="metric-tooltip">
+                                            <div class="metric-tooltip-title">Average Path Length</div>
+                                            Mean geodesic distance between archetype centroids. Small = compact space. Large = sprawling, diverse conceptual territory.
+                                        </div>
+                                        <div class="topology-metric-value" id="topoAvgGeodesic">—</div>
+                                        <div class="topology-metric-label">Avg Path</div>
+                                        <div class="topology-metric-sublabel">geodesic dist</div>
+                                    </div>
+                                    <div class="topology-metric-card">
+                                        <div class="metric-tooltip">
+                                            <div class="metric-tooltip-title">Diameter</div>
+                                            Maximum distance between any two archetypes. Defines the "size" of your conceptual universe. The farthest pair are your most opposed concepts.
+                                        </div>
+                                        <div class="topology-metric-value" id="topoDiameter">—</div>
+                                        <div class="topology-metric-label">Diameter</div>
+                                        <div class="topology-metric-sublabel">max distance</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Gravitational Field Visualization -->
+                            <div class="gravity-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🌌</div>
+                                    <div class="topology-section-title">Gravitational Field</div>
+                                    <div class="topology-section-subtitle">Archetype attraction wells</div>
+                                </div>
+                                <div class="gravity-canvas-container">
+                                    <canvas id="gravityCanvas"></canvas>
+                                    <div class="gravity-legend">
+                                        <span style="color: #a78bfa;">● Archetypes</span> &nbsp;
+                                        <span style="color: #5eead4;">● Descriptors</span> &nbsp;
+                                        <span style="color: rgba(139,92,246,0.3);">◐ Gravity wells</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Gradient Flow Field -->
+                            <div class="gravity-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🧭</div>
+                                    <div class="topology-section-title">Gradient Flow</div>
+                                    <div class="topology-section-subtitle">Direction of meaning</div>
+                                </div>
+                                <div class="gradient-flow-container">
+                                    <canvas id="gradientCanvas"></canvas>
+                                </div>
+                            </div>
+                            
+                            <!-- Semantic Bridges -->
+                            <div class="gravity-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🌉</div>
+                                    <div class="topology-section-title">Semantic Bridges</div>
+                                    <div class="topology-section-subtitle">Cross-archetype portals</div>
+                                </div>
+                                <div class="bridges-list" id="bridgesList">
+                                    <div class="empty-state" style="padding: 1rem; min-height: auto;">
+                                        <p style="color: var(--text-muted); font-size: 0.7rem;">Run builder to discover bridges</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Geodesic Distances -->
+                            <div class="gravity-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">📏</div>
+                                    <div class="topology-section-title">Geodesic Distances</div>
+                                    <div class="topology-section-subtitle">Shortest paths through meaning</div>
+                                </div>
+                                <div class="geodesic-container">
+                                    <div class="geodesic-matrix-wrapper">
+                                        <canvas id="geodesicCanvas"></canvas>
+                                        <div class="geodesic-color-scale">
+                                            <span>Close</span>
+                                            <div class="geodesic-scale-bar"></div>
+                                            <span>Far</span>
+                                        </div>
+                                    </div>
+                                    <div class="geodesic-stats">
+                                        <div class="geodesic-stat">
+                                            <div class="geodesic-stat-label">Closest Pair</div>
+                                            <div class="geodesic-stat-value" id="geoClosestPair" style="color: #14b8a6;">—</div>
+                                            <div class="geodesic-stat-value" id="geoMinDist" style="font-size: 0.7rem; opacity: 0.7;">—</div>
+                                        </div>
+                                        <div class="geodesic-stat">
+                                            <div class="geodesic-stat-label">Farthest Pair</div>
+                                            <div class="geodesic-stat-value" id="geoFarthestPair" style="color: #8b5cf6;">—</div>
+                                            <div class="geodesic-stat-value" id="geoMaxDist" style="font-size: 0.7rem; opacity: 0.7;">—</div>
+                                        </div>
+                                        <div class="geodesic-stat">
+                                            <div class="geodesic-stat-label">Mean Distance</div>
+                                            <div class="geodesic-stat-value" id="geoMeanDist">—</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                        </div>
+                    </div>
+                    
+                    <!-- Visuals Tab - AI Generated Archetype Art -->
+                    <div id="results-visuals" class="results-content">
+                        <div class="visuals-container">
+                            
+                            <!-- API Key Configuration -->
+                            <div class="visuals-config-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🔑</div>
+                                    <div class="topology-section-title">Gemini API</div>
+                                    <div class="topology-section-subtitle">Google AI Studio</div>
+                                </div>
+                                <div class="api-key-row">
+                                    <input type="password" id="geminiApiKey" class="api-key-input" placeholder="Enter your Gemini API key..." />
+                                    <button class="btn btn-secondary btn-sm" onclick="toggleApiKeyVisibility()">👁️</button>
+                                    <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save</button>
+                                </div>
+                                <div class="api-key-hint">Get your key at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a></div>
+                            </div>
+                            
+                            <!-- Archetype Selection -->
+                            <div class="visuals-selection-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🎭</div>
+                                    <div class="topology-section-title">Select Archetypes</div>
+                                    <div class="topology-section-subtitle">Choose 2-4 for interaction visualization</div>
+                                </div>
+                                <div class="archetype-chips" id="visualsArchetypeChips">
+                                    <div class="empty-chip">Run builder to see archetypes</div>
+                                </div>
+                                <div class="visuals-selected-info">
+                                    <span id="selectedArchetypesCount">0</span> selected
+                                    <button class="btn btn-secondary btn-sm" onclick="clearArchetypeSelection()" id="clearSelectionBtn" style="display: none;">Clear</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Style Options -->
+                            <div class="visuals-style-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🎨</div>
+                                    <div class="topology-section-title">Visual Style</div>
+                                    <div class="topology-section-subtitle">Codex Seraphinianus inspired</div>
+                                </div>
+                                <div class="style-options">
+                                    <label class="style-option">
+                                        <input type="radio" name="visualStyle" value="botanical" checked />
+                                        <span class="style-option-label">🌿 Botanical</span>
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="visualStyle" value="mechanical" />
+                                        <span class="style-option-label">⚙️ Mechanical</span>
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="visualStyle" value="anatomical" />
+                                        <span class="style-option-label">🫀 Anatomical</span>
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="visualStyle" value="cosmological" />
+                                        <span class="style-option-label">🌌 Cosmological</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Model Selection -->
+                            <div class="visuals-model-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🤖</div>
+                                    <div class="topology-section-title">AI Model</div>
+                                    <div class="topology-section-subtitle">Choose generation engine</div>
+                                </div>
+                                <div class="model-options">
+                                    <label class="model-option">
+                                        <input type="radio" name="imageModel" value="gemini-2.5-flash-image" checked />
+                                        <span class="model-option-content">
+                                            <span class="model-name">Gemini 2.5 Flash</span>
+                                            <span class="model-desc">Fast, creative</span>
+                                        </span>
+                                    </label>
+                                    <label class="model-option">
+                                        <input type="radio" name="imageModel" value="gemini-3-pro-image-preview" />
+                                        <span class="model-option-content">
+                                            <span class="model-name">Gemini 3 Pro</span>
+                                            <span class="model-desc">High quality</span>
+                                        </span>
+                                    </label>
+                                    <label class="model-option">
+                                        <input type="radio" name="imageModel" value="nano-banana-pro-preview" />
+                                        <span class="model-option-content">
+                                            <span class="model-name">🍌 Nano Banana</span>
+                                            <span class="model-desc">Experimental</span>
+                                        </span>
+                                    </label>
+                                    <label class="model-option">
+                                        <input type="radio" name="imageModel" value="imagen-4.0-generate-001" />
+                                        <span class="model-option-content">
+                                            <span class="model-name">Imagen 4</span>
+                                            <span class="model-desc">Photorealistic</span>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Generate Button -->
+                            <div class="visuals-generate-section">
+                                <button class="btn btn-primary generate-vision-btn" id="generateVisionBtn" onclick="generateArchetypeVision()" disabled>
+                                    <span class="generate-icon">✨</span>
+                                    <span>Generate Vision</span>
+                                </button>
+                                <div class="generate-status" id="generateStatus"></div>
+                            </div>
+                            
+                            <!-- Generated Image Display -->
+                            <div class="visuals-gallery-section">
+                                <div class="topology-section-header">
+                                    <div class="topology-section-icon">🖼️</div>
+                                    <div class="topology-section-title">Generated Visions</div>
+                                    <div class="topology-section-subtitle">Archetype interactions visualized</div>
+                                </div>
+                                <div class="visuals-gallery" id="visualsGallery">
+                                    <div class="visuals-placeholder">
+                                        <div class="visuals-placeholder-icon">🔮</div>
+                                        <p>Select archetypes and generate to see their visual manifestation</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
                         </div>
                     </div>
                 </div>
@@ -1910,6 +2966,97 @@
             }
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         }
+        
+        // Initialize spiral particle animation
+        function initSpiralAnimation() {
+            const container = document.getElementById('spiralContainer');
+            if (!container) return;
+            
+            // Clear existing particles (except center)
+            container.querySelectorAll('.spiral-particle, .spiral-particle-trail').forEach(p => p.remove());
+            
+            // Configuration
+            const numLayers = 5;
+            const trailLength = 8; // Smooth trail segments
+            
+            for (let layer = 0; layer < numLayers; layer++) {
+                const baseRadius = 25 + layer * 22;
+                const particlesInLayer = 5 + layer;
+                const layerSpeed = 5 + layer * 2.5;
+                const direction = layer % 2 === 0 ? 1 : -1;
+                
+                for (let i = 0; i < particlesInLayer; i++) {
+                    const angleOffset = (i / particlesInLayer) * 360;
+                    const baseSize = 4 + (numLayers - layer) * 0.8;
+                    
+                    // Color gradient from purple to cyan
+                    const hue = 270 - layer * 25;
+                    const particleColor = `hsl(${hue}, 75%, 65%)`;
+                    
+                    // Create smooth trailing segments (rendered back to front)
+                    for (let t = trailLength - 1; t >= 0; t--) {
+                        const trail = document.createElement('div');
+                        trail.className = 'spiral-particle-trail';
+                        
+                        // Smooth exponential falloff for size and opacity
+                        const progress = t / trailLength;
+                        const trailSize = baseSize * (1 - progress * 0.6);
+                        const trailOpacity = Math.pow(1 - progress, 1.5) * 0.9;
+                        const trailBlur = progress * 3;
+                        
+                        trail.style.width = `${trailSize}px`;
+                        trail.style.height = `${trailSize}px`;
+                        trail.style.background = particleColor;
+                        trail.style.boxShadow = `0 0 ${4 + (1 - progress) * 8}px ${particleColor}`;
+                        trail.style.setProperty('--base-opacity', trailOpacity);
+                        trail.style.setProperty('--base-blur', `${trailBlur}px`);
+                        trail.style.opacity = trailOpacity;
+                        trail.style.filter = `blur(${trailBlur}px)`;
+                        
+                        // Position at center
+                        trail.style.left = `calc(50% - ${trailSize/2}px)`;
+                        trail.style.top = `calc(50% - ${trailSize/2}px)`;
+                        
+                        // Orbit with angular offset for smooth trail
+                        const trailAngleOffset = t * 4; // 4 degrees per segment
+                        trail.style.setProperty('--orbit-radius', `${baseRadius}px`);
+                        
+                        const totalDelay = (-angleOffset - (direction * trailAngleOffset)) / 360 * layerSpeed;
+                        trail.style.animation = `spiralOrbit ${layerSpeed}s linear infinite, breathe ${3 + layer * 0.5}s ease-in-out infinite`;
+                        trail.style.animationDelay = `${totalDelay}s, ${t * 0.1}s`;
+                        if (direction === -1) {
+                            trail.style.animationDirection = 'reverse, normal';
+                        }
+                        
+                        container.appendChild(trail);
+                    }
+                    
+                    // Create bright lead particle
+                    const particle = document.createElement('div');
+                    particle.className = 'spiral-particle';
+                    
+                    particle.style.width = `${baseSize}px`;
+                    particle.style.height = `${baseSize}px`;
+                    particle.style.background = `hsl(${hue}, 85%, 75%)`;
+                    particle.style.boxShadow = `0 0 ${8 + layer}px ${particleColor}, 0 0 ${15 + layer * 2}px ${particleColor}`;
+                    
+                    particle.style.left = `calc(50% - ${baseSize/2}px)`;
+                    particle.style.top = `calc(50% - ${baseSize/2}px)`;
+                    
+                    particle.style.setProperty('--orbit-radius', `${baseRadius}px`);
+                    particle.style.animation = `spiralOrbit ${layerSpeed}s linear infinite`;
+                    particle.style.animationDelay = `${-angleOffset / 360 * layerSpeed}s`;
+                    if (direction === -1) {
+                        particle.style.animationDirection = 'reverse';
+                    }
+                    
+                    container.appendChild(particle);
+                }
+            }
+        }
+        
+        // Initialize spiral on load
+        setTimeout(initSpiralAnimation, 100);
         
         // Toggle chunking params visibility
         function updateChunkingParams(prefix) {
@@ -2006,6 +3153,20 @@
                     }
                 }, 100);
             }
+            
+            // Draw topology visualizations when switching to topology tab
+            if (tabName === 'topology' && metricsData) {
+                setTimeout(() => {
+                    const { metrics, archetypeNames } = metricsData;
+                    drawTopologyVisualizations(metrics, archetypeNames);
+                }, 100);
+            }
+            
+            // Update visuals tab when switching to it
+            if (tabName === 'visuals') {
+                initVisualsTab();
+                updateVisualsArchetypeChips();
+            }
         }
         
         function switchTab(tabName) {
@@ -2096,6 +3257,9 @@
                     currentResults = msg.result;
                     try {
                         displayResults(msg.result);
+                        // Update visuals tab archetype chips
+                        selectedArchetypesForVision = [];
+                        updateVisualsArchetypeChips();
                     } catch(err) {
                         console.error('[displayResults] Error:', err);
                         addLog('❌ Error displaying results: ' + err.message, 'error');
@@ -2716,8 +3880,9 @@
             if (!canvas) return;
             
             const ctx = canvas.getContext('2d');
-            const container = canvas.parentElement;
-            const size = Math.min(container.clientWidth - 10, container.clientHeight - 30);
+            const wrapper = canvas.parentElement;
+            // Make it square, fitting within the container
+            const size = Math.min(wrapper.clientWidth, wrapper.clientHeight, 160);
             const dpr = window.devicePixelRatio || 1;
             
             canvas.width = size * dpr;
@@ -2780,6 +3945,893 @@
             }
         }
         
+        // ================================================
+        // TOPOLOGY VISUALIZATIONS
+        // ================================================
+        
+        let topologyData = null;
+        
+        function computeTopologyData(metrics, archetypeNames) {
+            if (!metrics || !metrics.embedding_coords || metrics.embedding_coords.length === 0) {
+                return null;
+            }
+            
+            const embeddings = metrics.embedding_coords;
+            const perArchetype = metrics.per_archetype || {};
+            const interSim = metrics.inter_similarity || {};
+            
+            // Compute centroids for each archetype
+            const centroids = {};
+            archetypeNames.forEach(name => {
+                const pts = embeddings.filter(e => e.archetype === name);
+                if (pts.length > 0) {
+                    centroids[name] = {
+                        x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+                        y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+                        z: pts.reduce((s, p) => s + p.z, 0) / pts.length,
+                        mass: pts.length,
+                        descriptors: pts
+                    };
+                }
+            });
+            
+            // Find semantic bridges (descriptors with high similarity to multiple archetypes)
+            const bridges = [];
+            embeddings.forEach(emb => {
+                // Calculate distance to each centroid
+                const distances = {};
+                let minDist = Infinity;
+                let secondMinDist = Infinity;
+                let closest = null;
+                let secondClosest = null;
+                
+                Object.entries(centroids).forEach(([name, c]) => {
+                    const dist = Math.sqrt(
+                        Math.pow(emb.x - c.x, 2) + 
+                        Math.pow(emb.y - c.y, 2) + 
+                        Math.pow(emb.z - c.z, 2)
+                    );
+                    distances[name] = dist;
+                    
+                    if (dist < minDist) {
+                        secondMinDist = minDist;
+                        secondClosest = closest;
+                        minDist = dist;
+                        closest = name;
+                    } else if (dist < secondMinDist) {
+                        secondMinDist = dist;
+                        secondClosest = name;
+                    }
+                });
+                
+                // Bridge = close to two different archetypes
+                if (closest && secondClosest && closest !== secondClosest) {
+                    const ratio = secondMinDist / (minDist + 0.001);
+                    if (ratio < 1.5) { // Within 50% distance of closest
+                        bridges.push({
+                            descriptor: emb.descriptor,
+                            archetypes: [closest, secondClosest],
+                            strength: 1 / ratio,
+                            distances: distances
+                        });
+                    }
+                }
+            });
+            
+            // Sort bridges by strength
+            bridges.sort((a, b) => b.strength - a.strength);
+            
+            // Compute geodesic distances (using centroid distances as proxy)
+            const geodesicMatrix = {};
+            let minGeo = Infinity, maxGeo = 0;
+            let closestPair = '', farthestPair = '';
+            
+            archetypeNames.forEach(name_i => {
+                geodesicMatrix[name_i] = {};
+                archetypeNames.forEach(name_j => {
+                    if (name_i === name_j) {
+                        geodesicMatrix[name_i][name_j] = 0;
+                    } else if (centroids[name_i] && centroids[name_j]) {
+                        const dist = Math.sqrt(
+                            Math.pow(centroids[name_i].x - centroids[name_j].x, 2) +
+                            Math.pow(centroids[name_i].y - centroids[name_j].y, 2) +
+                            Math.pow(centroids[name_i].z - centroids[name_j].z, 2)
+                        );
+                        geodesicMatrix[name_i][name_j] = dist;
+                        
+                        if (dist > 0 && dist < minGeo) {
+                            minGeo = dist;
+                            closestPair = `${name_i.slice(0,8)}-${name_j.slice(0,8)}`;
+                        }
+                        if (dist > maxGeo) {
+                            maxGeo = dist;
+                            farthestPair = `${name_i.slice(0,8)}-${name_j.slice(0,8)}`;
+                        }
+                    }
+                });
+            });
+            
+            // Compute average geodesic
+            let sumGeo = 0, countGeo = 0;
+            archetypeNames.forEach(name_i => {
+                archetypeNames.forEach(name_j => {
+                    if (name_i !== name_j && geodesicMatrix[name_i]?.[name_j]) {
+                        sumGeo += geodesicMatrix[name_i][name_j];
+                        countGeo++;
+                    }
+                });
+            });
+            const avgGeodesic = countGeo > 0 ? sumGeo / countGeo : 0;
+            
+            // Compute curvature (variance of distances from centroid within each archetype)
+            let totalCurvature = 0;
+            archetypeNames.forEach(name => {
+                const pts = embeddings.filter(e => e.archetype === name);
+                if (pts.length > 1 && centroids[name]) {
+                    const c = centroids[name];
+                    const dists = pts.map(p => Math.sqrt(
+                        Math.pow(p.x - c.x, 2) + Math.pow(p.y - c.y, 2) + Math.pow(p.z - c.z, 2)
+                    ));
+                    const mean = dists.reduce((s, d) => s + d, 0) / dists.length;
+                    const variance = dists.reduce((s, d) => s + Math.pow(d - mean, 2), 0) / dists.length;
+                    totalCurvature += Math.sqrt(variance);
+                }
+            });
+            const meanCurvature = archetypeNames.length > 0 ? totalCurvature / archetypeNames.length : 0;
+            
+            // Connectivity = average inter-archetype similarity
+            let sumSim = 0, countSim = 0;
+            archetypeNames.forEach(name_i => {
+                archetypeNames.forEach(name_j => {
+                    if (name_i !== name_j && interSim[name_i]?.[name_j]) {
+                        sumSim += interSim[name_i][name_j];
+                        countSim++;
+                    }
+                });
+            });
+            const connectivity = countSim > 0 ? sumSim / countSim : 0;
+            
+            return {
+                centroids,
+                bridges: bridges.slice(0, 10), // Top 10
+                geodesicMatrix,
+                minGeodesic: minGeo === Infinity ? 0 : minGeo,
+                maxGeodesic: maxGeo,
+                avgGeodesic,
+                closestPair,
+                farthestPair,
+                meanCurvature,
+                connectivity,
+                totalMass: embeddings.length
+            };
+        }
+        
+        function drawTopologyVisualizations(metrics, archetypeNames) {
+            topologyData = computeTopologyData(metrics, archetypeNames);
+            if (!topologyData) return;
+            
+            // Update topology metrics
+            document.getElementById('topoTotalMass').textContent = topologyData.totalMass;
+            document.getElementById('topoMeanCurvature').textContent = topologyData.meanCurvature.toFixed(3);
+            document.getElementById('topoConnectivity').textContent = (topologyData.connectivity * 100).toFixed(1) + '%';
+            document.getElementById('topoNumBridges').textContent = topologyData.bridges.length;
+            document.getElementById('topoAvgGeodesic').textContent = topologyData.avgGeodesic.toFixed(3);
+            document.getElementById('topoDiameter').textContent = topologyData.maxGeodesic.toFixed(3);
+            
+            // Update geodesic stats
+            document.getElementById('geoMinDist').textContent = topologyData.minGeodesic.toFixed(3);
+            document.getElementById('geoMaxDist').textContent = topologyData.maxGeodesic.toFixed(3);
+            document.getElementById('geoClosestPair').textContent = topologyData.closestPair || '—';
+            document.getElementById('geoFarthestPair').textContent = topologyData.farthestPair || '—';
+            document.getElementById('geoMeanDist').textContent = topologyData.avgGeodesic.toFixed(3);
+            
+            // Draw gravity field
+            drawGravityField(metrics.embedding_coords, archetypeNames, topologyData.centroids);
+            
+            // Draw gradient flow (pass embeddings for richer visualization)
+            drawGradientFlow(archetypeNames, topologyData.centroids, metrics.embedding_coords);
+            
+            // Draw bridges list
+            drawBridgesList(topologyData.bridges);
+            
+            // Draw geodesic matrix
+            drawGeodesicMatrix(topologyData.geodesicMatrix, archetypeNames);
+        }
+        
+        function drawGravityField(embeddings, archetypeNames, centroids) {
+            const canvas = document.getElementById('gravityCanvas');
+            if (!canvas) return;
+            
+            const container = canvas.parentElement;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = container.clientWidth * dpr;
+            canvas.height = container.clientHeight * dpr;
+            canvas.style.width = container.clientWidth + 'px';
+            canvas.style.height = container.clientHeight + 'px';
+            ctx.scale(dpr, dpr);
+            
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            // Clear
+            ctx.fillStyle = 'rgba(10, 5, 20, 1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Map 3D coordinates to 2D (simple projection)
+            const mapCoord = (x, y) => ({
+                x: width * 0.5 + x * width * 0.35,
+                y: height * 0.5 - y * height * 0.35
+            });
+            
+            // Draw gravity wells (radial gradients for each archetype)
+            Object.entries(centroids).forEach(([name, c], idx) => {
+                const pos = mapCoord(c.x, c.y);
+                const radius = Math.sqrt(c.mass) * 25 + 40;
+                
+                const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius);
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                gradient.addColorStop(0, color + '40');
+                gradient.addColorStop(0.5, color + '15');
+                gradient.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw gravitational field lines (concentric circles)
+            Object.entries(centroids).forEach(([name, c], idx) => {
+                const pos = mapCoord(c.x, c.y);
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                
+                for (let r = 15; r < 80; r += 20) {
+                    ctx.strokeStyle = color + '20';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            });
+            
+            // Draw descriptor particles
+            embeddings.forEach((emb, i) => {
+                const pos = mapCoord(emb.x, emb.y);
+                const archIdx = archetypeNames.indexOf(emb.archetype);
+                const color = archIdx >= 0 ? CLUSTER_COLORS[archIdx % CLUSTER_COLORS.length] : '#5eead4';
+                
+                ctx.fillStyle = color + 'aa';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw archetype centroids
+            Object.entries(centroids).forEach(([name, c], idx) => {
+                const pos = mapCoord(c.x, c.y);
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                
+                // Outer glow
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                // Inner bright
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(name.slice(0, 12), pos.x, pos.y - 12);
+            });
+        }
+        
+        function drawGradientFlow(archetypeNames, centroids, embeddings) {
+            const canvas = document.getElementById('gradientCanvas');
+            if (!canvas) return;
+            
+            const container = canvas.parentElement;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = container.clientWidth * dpr;
+            canvas.height = container.clientHeight * dpr;
+            canvas.style.width = container.clientWidth + 'px';
+            canvas.style.height = container.clientHeight + 'px';
+            ctx.scale(dpr, dpr);
+            
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            // Clear with dark gradient
+            const bgGrad = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width/2);
+            bgGrad.addColorStop(0, 'rgba(15, 10, 30, 1)');
+            bgGrad.addColorStop(1, 'rgba(5, 5, 10, 1)');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, width, height);
+            
+            const mapCoord = (x, y) => ({
+                x: width * 0.5 + x * width * 0.4,
+                y: height * 0.5 - y * height * 0.4
+            });
+            
+            const centroidList = Object.entries(centroids);
+            if (centroidList.length === 0) return;
+            
+            // STEP 1: Draw Voronoi-like regions (colored zones)
+            const resolution = 4; // Pixel resolution for region fill
+            for (let px = 0; px < width; px += resolution) {
+                for (let py = 0; py < height; py += resolution) {
+                    const nx = (px - width * 0.5) / (width * 0.4);
+                    const ny = -(py - height * 0.5) / (height * 0.4);
+                    
+                    // Find closest and second closest archetype
+                    let minDist = Infinity, secondDist = Infinity;
+                    let closestIdx = 0;
+                    
+                    centroidList.forEach(([name, c], idx) => {
+                        const dist = Math.sqrt(Math.pow(c.x - nx, 2) + Math.pow(c.y - ny, 2));
+                        if (dist < minDist) {
+                            secondDist = minDist;
+                            minDist = dist;
+                            closestIdx = idx;
+                        } else if (dist < secondDist) {
+                            secondDist = dist;
+                        }
+                    });
+                    
+                    // Blend factor: 1 = pure region, 0 = boundary
+                    const blend = Math.min(1, (secondDist - minDist) * 3);
+                    const color = CLUSTER_COLORS[closestIdx % CLUSTER_COLORS.length];
+                    
+                    // Softer gradient with distance
+                    const distFade = Math.max(0, 1 - minDist * 0.8);
+                    const alpha = blend * distFade * 0.25;
+                    
+                    ctx.fillStyle = color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                    ctx.fillRect(px, py, resolution, resolution);
+                }
+            }
+            
+            // STEP 2: Draw boundary lines between regions (saddle ridges)
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1;
+            
+            for (let px = 0; px < width; px += 8) {
+                for (let py = 0; py < height; py += 8) {
+                    const nx = (px - width * 0.5) / (width * 0.4);
+                    const ny = -(py - height * 0.5) / (height * 0.4);
+                    
+                    let minDist = Infinity, secondDist = Infinity;
+                    centroidList.forEach(([name, c], idx) => {
+                        const dist = Math.sqrt(Math.pow(c.x - nx, 2) + Math.pow(c.y - ny, 2));
+                        if (dist < minDist) {
+                            secondDist = minDist;
+                            minDist = dist;
+                        } else if (dist < secondDist) {
+                            secondDist = dist;
+                        }
+                    });
+                    
+                    // On boundary: distances are similar
+                    const ratio = secondDist / (minDist + 0.001);
+                    if (ratio < 1.15) {
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                        ctx.beginPath();
+                        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            // STEP 3: Draw flow streamlines from edges toward centroids
+            const numStreamlines = 24;
+            for (let i = 0; i < numStreamlines; i++) {
+                // Start from edge of canvas
+                const angle = (i / numStreamlines) * Math.PI * 2;
+                const radius = Math.min(width, height) * 0.45;
+                let x = width/2 + Math.cos(angle) * radius;
+                let y = height/2 + Math.sin(angle) * radius;
+                
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                
+                // Flow toward nearest centroid
+                let prevColor = null;
+                for (let step = 0; step < 60; step++) {
+                    const nx = (x - width * 0.5) / (width * 0.4);
+                    const ny = -(y - height * 0.5) / (height * 0.4);
+                    
+                    // Compute gradient
+                    let gradX = 0, gradY = 0;
+                    let totalWeight = 0;
+                    let closestIdx = 0;
+                    let minDist = Infinity;
+                    
+                    centroidList.forEach(([name, c], idx) => {
+                        const dx = c.x - nx;
+                        const dy = c.y - ny;
+                        const dist = Math.sqrt(dx * dx + dy * dy) + 0.05;
+                        const weight = c.mass / (dist * dist);
+                        
+                        gradX += (dx / dist) * weight;
+                        gradY += (dy / dist) * weight;
+                        totalWeight += weight;
+                        
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closestIdx = idx;
+                        }
+                    });
+                    
+                    if (totalWeight > 0) {
+                        gradX /= totalWeight;
+                        gradY /= totalWeight;
+                    }
+                    
+                    const mag = Math.sqrt(gradX * gradX + gradY * gradY);
+                    if (mag < 0.01 || minDist < 0.1) break;
+                    
+                    // Step in gradient direction
+                    const stepSize = 6;
+                    x += (gradX / mag) * stepSize;
+                    y -= (gradY / mag) * stepSize;
+                    
+                    const color = CLUSTER_COLORS[closestIdx % CLUSTER_COLORS.length];
+                    const alpha = Math.max(0.1, 0.5 - step * 0.008);
+                    
+                    if (prevColor !== color) {
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                    }
+                    
+                    ctx.strokeStyle = color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                    ctx.lineWidth = 1.5;
+                    ctx.lineTo(x, y);
+                    prevColor = color;
+                }
+                ctx.stroke();
+            }
+            
+            // STEP 4: Draw archetype nodes with labels
+            centroidList.forEach(([name, c], idx) => {
+                const pos = mapCoord(c.x, c.y);
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                const radius = Math.sqrt(c.mass) * 2 + 8;
+                
+                // Glow
+                const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius * 2);
+                glow.addColorStop(0, color + 'aa');
+                glow.addColorStop(0.5, color + '44');
+                glow.addColorStop(1, 'transparent');
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius * 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Core
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Label
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(name.slice(0, 12), pos.x, pos.y + radius + 14);
+                
+                // Mass indicator
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = '8px sans-serif';
+                ctx.fillText(`n=${c.mass}`, pos.x, pos.y + radius + 24);
+            });
+        }
+        
+        function drawBridgesList(bridges) {
+            const container = document.getElementById('bridgesList');
+            if (!container) return;
+            
+            if (bridges.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="padding: 1rem; min-height: auto;">
+                        <p style="color: var(--text-muted); font-size: 0.7rem;">No semantic bridges found</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = bridges.map(bridge => `
+                <div class="bridge-item">
+                    <div class="bridge-descriptor">${bridge.descriptor.slice(0, 40)}${bridge.descriptor.length > 40 ? '…' : ''}</div>
+                    <div class="bridge-archetypes">
+                        <span class="bridge-archetype-tag">${bridge.archetypes[0].slice(0, 10)}</span>
+                        <span style="color: var(--text-muted);">↔</span>
+                        <span class="bridge-archetype-tag">${bridge.archetypes[1].slice(0, 10)}</span>
+                    </div>
+                    <div class="bridge-strength">${(bridge.strength * 100).toFixed(0)}%</div>
+                </div>
+            `).join('');
+        }
+        
+        function drawGeodesicMatrix(geodesicMatrix, archetypeNames) {
+            const canvas = document.getElementById('geodesicCanvas');
+            if (!canvas) return;
+            
+            const container = canvas.parentElement;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Make it square and larger
+            const availableWidth = container.clientWidth - 20;
+            const size = Math.min(availableWidth, 220);
+            canvas.width = size * dpr;
+            canvas.height = size * dpr;
+            canvas.style.width = size + 'px';
+            canvas.style.height = size + 'px';
+            ctx.scale(dpr, dpr);
+            
+            const n = archetypeNames.length;
+            if (n === 0) return;
+            
+            // Find min/max for normalization (excluding diagonal)
+            let minDist = Infinity, maxDist = 0;
+            archetypeNames.forEach(name_i => {
+                archetypeNames.forEach(name_j => {
+                    if (name_i !== name_j) {
+                        const dist = geodesicMatrix[name_i]?.[name_j] || 0;
+                        if (dist > 0 && dist < minDist) minDist = dist;
+                        if (dist > maxDist) maxDist = dist;
+                    }
+                });
+            });
+            if (minDist === Infinity) minDist = 0;
+            
+            const labelSpace = 35; // Space for labels
+            const matrixSize = size - labelSpace;
+            const cellSize = matrixSize / n;
+            
+            // Draw background
+            ctx.fillStyle = 'rgba(10, 10, 20, 1)';
+            ctx.fillRect(0, 0, size, size);
+            
+            // Draw matrix cells
+            archetypeNames.forEach((name_i, i) => {
+                archetypeNames.forEach((name_j, j) => {
+                    const dist = geodesicMatrix[name_i]?.[name_j] || 0;
+                    const x = labelSpace + j * cellSize;
+                    const y = labelSpace + i * cellSize;
+                    
+                    if (i === j) {
+                        // Diagonal - self distance
+                        ctx.fillStyle = '#0f0f1a';
+                    } else {
+                        // Normalize: close = teal, far = purple
+                        const range = maxDist - minDist || 1;
+                        const norm = (dist - minDist) / range; // 0 = closest, 1 = farthest
+                        
+                        // Color gradient: teal (close) -> blue -> purple (far)
+                        const r = Math.floor(20 + norm * 119);  // 20 -> 139
+                        const g = Math.floor(184 - norm * 92);  // 184 -> 92
+                        const b = Math.floor(166 + norm * 80);  // 166 -> 246
+                        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                    }
+                    
+                    ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+                    
+                    // Show distance value in cells if space allows
+                    if (cellSize > 30 && i !== j) {
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                        ctx.font = '8px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(dist.toFixed(2), x + cellSize/2, y + cellSize/2);
+                    }
+                });
+            });
+            
+            // Draw row labels (left side)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            archetypeNames.forEach((name, i) => {
+                const y = labelSpace + i * cellSize + cellSize/2;
+                const label = name.slice(0, 5);
+                ctx.fillStyle = CLUSTER_COLORS[i % CLUSTER_COLORS.length];
+                ctx.fillText(label, labelSpace - 4, y);
+            });
+            
+            // Draw column labels (top)
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            archetypeNames.forEach((name, j) => {
+                const x = labelSpace + j * cellSize + cellSize/2;
+                const label = name.slice(0, 5);
+                ctx.fillStyle = CLUSTER_COLORS[j % CLUSTER_COLORS.length];
+                ctx.save();
+                ctx.translate(x, labelSpace - 4);
+                ctx.rotate(-Math.PI / 4);
+                ctx.fillText(label, 0, 0);
+                ctx.restore();
+            });
+            
+            // Draw grid lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= n; i++) {
+                ctx.beginPath();
+                ctx.moveTo(labelSpace + i * cellSize, labelSpace);
+                ctx.lineTo(labelSpace + i * cellSize, size);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(labelSpace, labelSpace + i * cellSize);
+                ctx.lineTo(size, labelSpace + i * cellSize);
+                ctx.stroke();
+            }
+        }
+        
+        // ================================================
+        // VISUALS TAB - AI Generated Archetype Art (Gemini)
+        // ================================================
+        
+        let selectedArchetypesForVision = [];
+        let geminiApiKey = localStorage.getItem('gemini_api_key') || '';
+        let generatedVisions = [];
+        
+        // Initialize API key from localStorage
+        function initVisualsTab() {
+            const apiKeyInput = document.getElementById('geminiApiKey');
+            if (apiKeyInput && geminiApiKey) {
+                apiKeyInput.value = geminiApiKey;
+            }
+            updateGenerateButton();
+        }
+        
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('geminiApiKey');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+        
+        function saveApiKey() {
+            const input = document.getElementById('geminiApiKey');
+            geminiApiKey = input.value.trim();
+            localStorage.setItem('gemini_api_key', geminiApiKey);
+            updateGenerateButton();
+            
+            const status = document.getElementById('generateStatus');
+            status.textContent = geminiApiKey ? '✓ API key saved' : 'API key cleared';
+            status.className = 'generate-status ' + (geminiApiKey ? 'success' : '');
+            setTimeout(() => { status.textContent = ''; status.className = 'generate-status'; }, 2000);
+        }
+        
+        function updateVisualsArchetypeChips() {
+            const chipsContainer = document.getElementById('visualsArchetypeChips');
+            if (!chipsContainer || !currentResults) return;
+            
+            const archetypeNames = Object.keys(currentResults.archetypes || {});
+            
+            if (archetypeNames.length === 0) {
+                chipsContainer.innerHTML = '<div class="empty-chip">Run builder to see archetypes</div>';
+                return;
+            }
+            
+            chipsContainer.innerHTML = archetypeNames.map((name, idx) => {
+                const isSelected = selectedArchetypesForVision.includes(name);
+                const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                return `<div class="archetype-chip ${isSelected ? 'selected' : ''}" 
+                             style="${isSelected ? '' : `border-color: ${color}40; color: ${color};`}"
+                             onclick="toggleArchetypeForVision('${name}')">${name}</div>`;
+            }).join('');
+            
+            updateSelectedCount();
+        }
+        
+        function toggleArchetypeForVision(name) {
+            const idx = selectedArchetypesForVision.indexOf(name);
+            if (idx >= 0) {
+                selectedArchetypesForVision.splice(idx, 1);
+            } else if (selectedArchetypesForVision.length < 4) {
+                selectedArchetypesForVision.push(name);
+            }
+            updateVisualsArchetypeChips();
+            updateGenerateButton();
+        }
+        
+        function clearArchetypeSelection() {
+            selectedArchetypesForVision = [];
+            updateVisualsArchetypeChips();
+            updateGenerateButton();
+        }
+        
+        function updateSelectedCount() {
+            const countEl = document.getElementById('selectedArchetypesCount');
+            const clearBtn = document.getElementById('clearSelectionBtn');
+            if (countEl) countEl.textContent = selectedArchetypesForVision.length;
+            if (clearBtn) clearBtn.style.display = selectedArchetypesForVision.length > 0 ? 'inline-block' : 'none';
+        }
+        
+        function updateGenerateButton() {
+            const btn = document.getElementById('generateVisionBtn');
+            if (!btn) return;
+            btn.disabled = !geminiApiKey || selectedArchetypesForVision.length < 2;
+        }
+        
+        function buildVisionPrompt(archetypes, style) {
+            if (!currentResults) return '';
+            
+            // Get descriptors for each archetype
+            const archetypeDescriptions = archetypes.map(name => {
+                const words = currentResults.archetypes[name] || [];
+                return `${name}: ${words.slice(0, 8).join(', ')}`;
+            }).join('\n');
+            
+            // Style descriptions inspired by Codex Seraphinianus
+            const styleDescriptions = {
+                botanical: 'fantastical botanical illustrations with impossible hybrid plants, root systems that form symbolic connections, flowering structures that represent concepts, in the style of ancient herbal manuscripts crossed with alien botany',
+                mechanical: 'intricate mechanical diagrams with gears, pistons, and clockwork mechanisms that impossibly transform into organic forms, technical cross-sections revealing inner symbolic workings, brass and copper tones',
+                anatomical: 'surreal anatomical illustrations combining human, animal, and imaginary organ structures, medical diagrams of impossible beings, veins and nerves as channels of meaning, on aged parchment',
+                cosmological: 'celestial maps and astronomical charts with orbiting symbolic bodies, zodiacal wheel arrangements, cosmic diagrams showing the gravitational relationships between concepts, deep space mysticism'
+            };
+            
+            const styleDesc = styleDescriptions[style] || styleDescriptions.botanical;
+            
+            return `Create a single highly detailed illustration in the distinctive style of the Codex Seraphinianus - an encyclopedia of an imaginary world with surreal, dreamlike imagery and invented writing systems.
+
+The image should visualize the INTERACTION and RELATIONSHIP between these archetypal concepts:
+
+${archetypeDescriptions}
+
+Style requirements:
+- ${styleDesc}
+- Include invented glyphs or symbolic writing as decorative elements
+- Show how the archetypes connect, merge, or interact with each other visually
+- Each archetype should have a distinct but harmonious visual identity
+- Use subtle color palette with aged paper texture feel
+- Include fine detail work suitable for a mysterious ancient codex
+- The archetypes should be interacting, not just placed side by side
+
+The overall composition should feel like a page from an alien encyclopedia documenting the relationship between these abstract concepts as if they were natural phenomena.`;
+        }
+        
+        async function generateArchetypeVision() {
+            if (!geminiApiKey || selectedArchetypesForVision.length < 2) return;
+            
+            const btn = document.getElementById('generateVisionBtn');
+            const status = document.getElementById('generateStatus');
+            const style = document.querySelector('input[name="visualStyle"]:checked')?.value || 'botanical';
+            const model = document.querySelector('input[name="imageModel"]:checked')?.value || 'gemini-2.5-flash-image';
+            
+            // UI feedback
+            btn.disabled = true;
+            btn.classList.add('loading');
+            status.textContent = `Generating with ${model.split('-')[0]}...`;
+            status.className = 'generate-status';
+            
+            const prompt = buildVisionPrompt(selectedArchetypesForVision, style);
+            
+            try {
+                // Call backend proxy to avoid CORS issues
+                const response = await fetch('/api/generate-vision', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        apiKey: geminiApiKey,
+                        prompt: prompt,
+                        model: model
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Generation failed');
+                }
+                
+                // Add to gallery
+                addVisionToGallery({
+                    archetypes: [...selectedArchetypesForVision],
+                    style: style,
+                    model: model,
+                    prompt: prompt,
+                    imageData: data.imageData,
+                    timestamp: new Date().toISOString()
+                });
+                
+                status.textContent = '✓ Vision generated!';
+                status.className = 'generate-status success';
+                
+            } catch (error) {
+                console.error('Vision generation error:', error);
+                status.textContent = `Error: ${error.message}`;
+                status.className = 'generate-status error';
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+                updateGenerateButton();
+            }
+        }
+        
+        function addVisionToGallery(vision) {
+            generatedVisions.unshift(vision);
+            renderVisualsGallery();
+        }
+        
+        function renderVisualsGallery() {
+            const gallery = document.getElementById('visualsGallery');
+            if (!gallery) return;
+            
+            if (generatedVisions.length === 0) {
+                gallery.innerHTML = `
+                    <div class="visuals-placeholder">
+                        <div class="visuals-placeholder-icon">🔮</div>
+                        <p>Select archetypes and generate to see their visual manifestation</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            gallery.innerHTML = generatedVisions.map((vision, idx) => `
+                <div class="vision-card">
+                    <div class="vision-card-header">
+                        <div class="vision-archetypes">
+                            ${vision.archetypes.map(a => `<span class="vision-archetype-tag">${a}</span>`).join('')}
+                        </div>
+                        <div class="vision-meta">
+                            <span class="vision-style-tag">${vision.style}</span>
+                            <span class="vision-model-tag">${vision.model?.split('-').slice(0,2).join(' ') || 'gemini'}</span>
+                        </div>
+                    </div>
+                    <div class="vision-image-container">
+                        <img class="vision-image" src="${vision.imageData}" alt="Archetype vision" />
+                    </div>
+                    <div class="vision-actions">
+                        <button class="vision-action-btn" onclick="downloadVision(${idx})">💾 Save</button>
+                        <button class="vision-action-btn" onclick="toggleVisionPrompt(${idx})">📝 Prompt</button>
+                        <button class="vision-action-btn" onclick="removeVision(${idx})">🗑️ Remove</button>
+                    </div>
+                    <div class="vision-prompt" id="visionPrompt${idx}" style="display: none;">
+                        ${vision.prompt.replace(/\n/g, '<br>')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function downloadVision(idx) {
+            const vision = generatedVisions[idx];
+            if (!vision) return;
+            
+            const link = document.createElement('a');
+            link.href = vision.imageData;
+            link.download = `egregore_${vision.archetypes.join('_')}_${vision.style}.png`;
+            link.click();
+        }
+        
+        function toggleVisionPrompt(idx) {
+            const promptEl = document.getElementById(`visionPrompt${idx}`);
+            if (promptEl) {
+                promptEl.style.display = promptEl.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+        
+        function removeVision(idx) {
+            generatedVisions.splice(idx, 1);
+            renderVisualsGallery();
+        }
+
         function updateClusterViz(result) {
             const stats = result.stats || {};
             
