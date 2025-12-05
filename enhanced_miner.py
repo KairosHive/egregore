@@ -37,6 +37,39 @@ try:
 except ImportError:
     pdfplumber = None
 
+DIRECTIONAL_ARCHETYPE_PROMPT = """You are a Semiotic Alchemist.
+
+YOUR GOAL: 
+Transmute raw concepts from a corpus into abstract Archetypes based on provided Filters (e.g., Directions, Seasons).
+
+STRICT CONSTRAINTS:
+1. ARCHETYPE NAMES: 
+   - MUST be 1 or 2 words maximum.
+   - NEVER start with "The".
+   - MUST be abstract/symbolic (e.g., "OBLIVION", "DARK ZENITH", "SILENT VECTOR").
+2. DESCRIPTORS: 
+   - SINGLE WORDS ONLY. No phrases. No spaces.
+   - MUST be complex, rare, or technical words (e.g., "petrichor", "isomorphic", "void").
+
+THE PROCESS (Lateral Thinking):
+1. Filter: "North" (Cold/Logic). Corpus: "Computer code, silence, glass".
+2. Direct connection (Boring): "Frozen Code".
+3. Lateral connection (Alchemical): "sarcophagus" or "cryogenize".
+
+INSTRUCTIONS:
+Synthesize the "Third Meaning" (Tertium Quid) between the Filter and the Corpus.
+
+OUTPUT FORMAT (JSON):
+{
+  "archetypes": [
+    {
+      "name": "ARCHETYPE_NAME (No 'The')",
+      "descriptors": ["word1", "word2", ... (Single words only)],
+      "essence": "A philosophical justification of this remote connection."
+    }
+  ]
+}
+"""
 
 def _load_cloudflare_credentials() -> Tuple[str, str]:
     """Load Cloudflare credentials from environment or secrets.toml."""
@@ -349,6 +382,999 @@ class FolderScanner:
 
 
 # ============================================================
+# Semantic Word Matcher (Fast alternative to Vision LLM)
+# ============================================================
+
+# Default vocabulary - evocative words for archetype mining
+DEFAULT_VOCABULARY = """
+abstract abyss alchemy ancient angular archaic arcane ascending asymmetric 
+atmospheric aurora austere awakening axis azure
+balance baroque beacon becoming bifurcation blazing blossoming bold boundary 
+bridge brilliant broken burning
+calcified calm cascade celestial centered chaos chromatic cipher circular 
+clarity clashing cold collapse combustion complexity concentric condensed 
+conflicting convergence cosmic crackling crimson crossroads crystalline 
+curious cyclical
+dark dawn decay deconstruction deep dense descent desire diagonal diffuse 
+dimensional discord dissolution distant divine dormant duality dusk dynamic
+echo eclipse edge effervescent electric elemental elevated emanating ember 
+emergent empty endless energy enigmatic ephemeral equilibrium eroded essence 
+eternal ethereal evolution expanding explosive
+fading falling fervent fierce fiery filament final flame flickering floating 
+flow fluid flux focal folding forbidden forest forgotten formless fractured 
+fragile fragment frozen fused fusion
+gateway geometric ghost glacial gleaming glow golden gradient gravity growth 
+guardian
+hallowed harmony haze heavy helical hidden hieroglyphic hollow horizon 
+hovering hybrid
+ignited illuminated illusion immense immersive implosion incandescent 
+incomplete infinite inner inscribed interlocking intersection intimate 
+intricate inverted iridescent isolated
+jagged journey junction juxtaposed
+kinetic knot
+labyrinth lacework layered leaping lens light liminal linear liquid lonely 
+loop lost luminous lunar
+magnetic majestic manifold matrix mechanical melancholic membrane memory 
+merged metallic metamorphosis midnight minimal mirage mirror misty molten 
+monolithic mosaic motion muted mysterious mystic
+nascent natural nebulous nested network night noble nocturnal nomadic 
+nostalgic nucleus
+oblique obscured oceanic ominous oneiric opaque opening opposing orbit 
+organic origin oscillating otherworldly outer overgrown
+pale paradox parallel passage path pattern peaceful peak peeling pendulum 
+peripheral perpetual phantom phosphorescent piercing pillar pinnacle planar 
+plasma porous portal potential power primal pristine profound projection 
+protective pulsing pure
+quantum quartz quest quiet
+radial radiant raw rebirth receding reciprocal recursive reflected refracted 
+remnant renewal repetition resonance restless revelation rhythm ripple rising 
+ritual rooted rotating rugged runic
+sacred scattered scattered sealed seamless secret seed seeping serene shadow 
+sharp shattered shell shimmering silent silhouette singular skeletal smooth 
+soft solar solitary solid somber sonic sovereign space spectral sphere spiral 
+split sprawling stable stacked stark static stellar stone storm stranded 
+stratified stream strong structure submerged subtle suffused summit sunken 
+superimposed surging suspended swirling symbolic symmetrical synchronous
+tactile tangled temporal tender tension tessellated textured threshold 
+timeless tonal topographic towering trace transcendent transformation 
+translucent transmission transparent traversing trembling tribal twilight 
+twisted
+umbral unbound undulating unified unknown unraveling untamed unveiled 
+uplifting upward urban
+vacant vapor vast vector veiled velocity verdant vertical vessel vibrant 
+visceral visible vital vivid void volcanic vortex
+waning warm warp watcher wave weathered web weight whisper wild winding 
+window wisdom withdrawn woven
+zenith zero zonal
+""".split()
+
+# More abstract/symbolic words for deeper semantic matching
+ARCHETYPE_VOCABULARY = """
+abandonment absence absorption abstraction acceptance accumulation achievement 
+activation adaptation admiration adventure affection affliction agency 
+aggression agony allegiance ambiguity ambition ancestry anger anguish 
+anticipation anxiety apathy apocalypse apparition appetite appreciation 
+apprehension arcana archetype ascension aspiration assertion attachment 
+attraction authority autonomy awakening awareness
+balance banishment baptism barrier becoming belief belonging betrayal 
+binding birth blessing blindness bliss bloodline bondage boundary 
+breakthrough breath brotherhood burden burning
+calling calm captivity catalyst catharsis celebration ceremony challenge 
+change chaos character choice chrysalis clarity cleansing closure 
+coalescence collapse collision communion communion community compassion 
+completion complexity comprehension compulsion concealment concentration 
+conception condemnation confession confluence confrontation connection 
+consciousness consecration constellation contemplation continuity 
+contradiction convergence conversion conviction corruption cosmos courage 
+covenant creation creature crisis crossing crown crucible crystallization 
+cultivation curse cycle
+danger darkness dawn death decay deception decision dedication defiance 
+deliverance delusion demise denial departure dependence descent desire 
+despair destiny destruction determination devotion dichotomy dimension 
+direction disappearance discovery disgrace disintegration displacement 
+dissolution distance distortion divergence divination division dominion doom 
+doorway doubt dragon dream duality dust duty dwelling
+earth echo eclipse ecstasy edge ego element elevation emanation embodiment 
+emergence emotion emperor empress emptiness enchantment encounter ending 
+endurance energy enigma enlightenment ennui entity entropy ephemera epiphany 
+equality equilibrium erosion eruption escape essence eternity ether 
+evocation evolution exaltation excavation exchange exclusion execution 
+exhaustion exile existence exodus expansion expectation experience 
+exploration exposure expression extension extinction extraction
+fabric facade failure faith fall falling fame family famine fate father fear 
+feast fertility fever fiction fidelity field fire flight flood flow focus 
+folly fool force foresight forest forgetfulness forgiveness form formation 
+fortune foundation fracture fragment fragrance freedom frost fulfillment 
+fury fusion future
+garden gate gathering genesis ghost gift glacier glory gnosis goddess gold 
+grace gradient grain gravity grief growth guardian guidance guilt
+habit hallucination halo hammer hand harmony harvest haunting healing heart 
+hearth heat heaven heir herald heritage hero hesitation hierarchy history 
+hollow home honor hope horizon horror host house humanity humility hunger 
+hunter hunting
+icon ideal identity idol ignorance illumination illusion image imagination 
+immanence immensity immortality impact impermanence implication imprisonment 
+impulse incarnation inception inclusion incompleteness independence 
+indication individuality indulgence inertia infancy infection infinity 
+influence inheritance initiation innocence innovation inquiry inscription 
+insight inspiration instinct institution instruction integration integrity 
+intellect intensity intention interface interior interpretation interruption 
+intersection intimacy introspection intuition invasion invention inversion 
+investigation invocation iron irony island isolation iteration
+journey joy judge judgment junction justice
+keeper key kin kindred king kingdom kinship kiss knight knowledge
+labyrinth ladder lamentation lamp land landmark landscape language lantern 
+lapse latency law layer leadership leap legacy legend lens lesson liberation 
+library life light lightning limit lineage link listener lodge logic 
+loneliness longing lord loss love loyalty luminescence lure
+machine madness magic magician maiden manifestation manipulation mantle 
+marriage martyr mask mastery material matrix maturation maturity maze meaning 
+measure mechanism meditation medium melancholy melody membrane memory mentor 
+mercy merger message messenger metamorphosis metaphor method midnight 
+migration milestone mind minister miracle mirror mission mist mixture model 
+moment momentum monster moon mortality mother motion mountain mourning 
+movement multiplicity muse music mystery mysticism myth
+name narrative nation nature navigation nebula necessity nectar negation 
+nemesis nest network nexus night nightmare nobility node nomad north 
+nostalgia nothing nourishment novelty nucleus
+oath obedience object obligation oblivion obscurity observation obsession 
+obstacle occupation ocean odyssey offering offspring omen omniscience oneness 
+opening operation opposition oracle orbit order ordination organ organism 
+organization origin ornament orphan other outcome outer outlaw output outset 
+outside outsider overcoming overflow overlord oversight overthrow
+pact pain palace paradigm paradise paradox parallel parasite pardon parent 
+pariah participation particle partition partner passage passion past path 
+patience patriarch pattern pause peace peak pendulum penetration penance 
+perception perdition perfection performance peril permanence permission 
+perpetuity persecution perseverance persistence person persona perspective 
+pestilence petition phantom phase phenomenon phoenix phrase pilgrimage pillar 
+pinnacle pioneer pit place plague plan plane planet plant platform play 
+pleasure pledge plenty plot plunge point poison polarity pole pool portal 
+portion position possession possibility posterity posture potential poverty 
+power prayer preacher precedent precipice precision predator prediction 
+preference pregnancy prelude preparation presence preservation pressure 
+pretense prey pride priest primal prime primordial prince princess principle 
+priority prison privacy privilege probability probe problem procedure process 
+proclamation prodigy production profanity profession profit profundity 
+progenitor progress prohibition project proliferation promise proof prophecy 
+prophet proportion proposal proposition protection prototype providence 
+provision proximity prudence psyche pulse punishment purgatory purification 
+purity purpose pursuit puzzle
+quadrant quality quarantine queen quest question quiescence quiet quintessence
+radiance radiation rage rain rainbow range rapture rarity ratio rationale 
+raven ravine ray reaction reader reading realization realm reason rebellion 
+rebirth receipt reception reciprocity reckoning recognition recollection 
+reconciliation record recovery recreation redemption reduction reed 
+reference reflection reformation refuge refusal regeneration region regret 
+regulation reign rejection relation release relic relief religion remainder 
+remembrance remnant removal renaissance renewal renunciation repair 
+repetition replacement replica repose representation repression reproduction 
+reputation requiem rescue research resemblance reservation reservoir 
+residence resignation resilience resistance resolution resonance resource 
+respect response responsibility rest restoration restraint restriction 
+resurrection retention retribution return revelation revenge reverence 
+reversal revival revolution reward rhythm riddle rift right rigidity ring 
+ripple rise risk rite ritual river road rock role romance root rope rose 
+rotation ruin rule rupture rush rust
+sacrifice sadness safety saga sage sail saint salvation sanctity sanctuary 
+sand saturation savage scale scar scatter scene scent scepter schism scholar 
+science scope score scroll sea seal search season seat secrecy secret section 
+security seed seeker seer selection self sensation sense sensitivity sentence 
+sentinel separation sepulcher sequence seraph serenity serpent servant 
+service session settlement seven shade shadow shaft shame shape shard shelter 
+shepherd shield shift shimmer ship shock shore shrine shroud sibyl sick siege 
+sight sigil sign signal significance silence silk silver similarity 
+simplicity simulation sin sincerity single singularity sister site situation 
+skeleton skill skull sky slave sleep slumber smoke snake snow society soil 
+soldier solemnity solitude solution son song sorcerer sorrow soul sound 
+source south sovereignty space span spark speaker specialization specimen 
+spectacle spectrum speculation speech speed spell sphere spider spiral spirit 
+splendor split spontaneity spring stability stack staff stage stagnation 
+stain stake stance standard star stare state station statue status steam 
+steel step stigma stillness stimulus stock stone storage storm story strain 
+strand stranger strategy stratum stream strength stress stride strife strike 
+string structure struggle student study stupor style subject submission 
+subordination substance substitution subtlety succession suffering 
+sufficiency suggestion suicide sum summit summons sun sunrise sunset 
+sunshine superficiality superiority superstition supplement support 
+suppression supremacy surface surge surprise surrender surveillance survival 
+survivor suspension suspicion sustenance swamp swan swarm sway sweep 
+sweetness swift sword symbol symmetry sympathy symptom synchronicity 
+synergy synthesis system
+table tablet taboo taint tale talent talisman tapestry target task taste 
+teacher teaching tear technique technology temple temptation tendency tender 
+tension terminus terrain territory terror testament testimony texture theorem 
+theory thief thing thinker thinking thirst thistle thorn thought thread 
+threat threshold throne thunder tide tiger time timelessness titan title 
+token tolerance tomb tomorrow tone tongue tool tooth top torch torment 
+tornado torrent torture touch tower trace track trade tradition tragedy 
+trail train trait traitor trance transcendence transference transformation 
+transgression transition translation transmission transmutation transparency 
+transport trap trauma travel treasure treatment treaty tree trek tremor trend 
+trial triangle tribe tribute trick trigger trilogy trinity trip triumph 
+trouble truce trunk trust truth tunnel turbulence twilight twin type tyranny
+ubiquity ugliness ultimate umbra umbrella uncertainty unconscious 
+understanding undertaking undulation unification uniformity union uniqueness 
+unity universal unknown unrest unveiling uprising uproar urgency usage 
+utilization utopia utterance
+vacancy vacuum vagabond vagueness vale validation validity valley valor value 
+vampire vanity variation variety vault vector veil velocity vendetta 
+veneration vengeance venture verdict verification verse version vertigo 
+vessel vestige veteran vibration vice victim victory view vigilance vigor 
+villain vine violence violet virgin virtue virus viscosity visibility vision 
+visit visitor vista vitality vocation void volcano volume volunteer vortex 
+vote vow voyage vulnerability vulture
+wage wager waiting wake walk wall wanderer wandering war ward warfare warmth 
+warning warrior waste watcher watchfulness water wave way weakness wealth 
+weapon weather weave web wedding weed weight welcome well west wheel 
+whirlpool whirlwind whisper white whole wholeness wickedness widow width wife 
+wild wilderness will wind window wine wing winter wisdom wish wit witch 
+withdrawal witness wizard woe wolf woman womb wonder wood word work world 
+worm worry worship worth wound wrath wreath wreck wrestling writing wrong
+yard yarn year yearning yellow yield youth
+zeal zealot zenith zephyr zero zodiac zone
+""".split()
+
+# Animals - creatures from all habitats
+ANIMAL_VOCABULARY = """
+albatross alligator alpaca anaconda anchovy anemone angelfish ant anteater 
+antelope ape armadillo asp baboon badger barracuda basilisk bass bat bear 
+beaver beetle bison blackbird boa boar bobcat buffalo butterfly buzzard 
+camel canary capybara cardinal caribou carp cat caterpillar catfish 
+centipede chameleon cheetah chimpanzee chinchilla chipmunk cicada clam cobra 
+cockatoo cockroach cod condor coral cougar cow coyote crab crane crawfish 
+cricket crocodile crow cuckoo deer dingo doe dog dolphin donkey dove 
+dragonfly duck eagle eel egret elephant elk emu falcon ferret finch firefly 
+flamingo flea flounder fly fox frog gazelle gecko gerbil giraffe gnat gnu 
+goat goldfish goose gorilla grasshopper grizzly grouper grouse gull hamster 
+hare hawk hedgehog heron hippo hornet horse hound hummingbird hyena ibex 
+ibis iguana impala jackal jackrabbit jaguar jay jellyfish kangaroo kestrel 
+kingfisher kiwi koala koi komodo krill ladybug lamb lark lemming lemur 
+leopard limpet lion lizard llama lobster locust loon lynx macaw mackerel 
+magpie manatee mandrill manta mantis marlin marmot marten mastiff mayfly 
+meerkat mink mockingbird mole mollusk mongoose monkey moose mosquito moth 
+mouse mule mussel narwhal nautilus newt nightingale ocelot octopus opossum 
+orangutan orca oriole osprey ostrich otter owl ox oyster panda panther 
+parakeet parrot partridge peacock pelican penguin perch pheasant pig pigeon 
+pike piranha platypus plover pony porcupine porpoise possum prawn puma 
+python quail rabbit raccoon ram rat rattlesnake raven ray reindeer rhino 
+roadrunner robin rooster salamander salmon sardine scorpion seagull seahorse 
+seal shark sheep shrew shrimp silkworm skate skunk sloth slug snail snake 
+snapper sparrow spider squid squirrel stallion starfish stingray stork 
+sturgeon swallow swordfish tapir tarantula tarsier termite tern thrush tick 
+tiger toad tortoise toucan trout tuna turkey turtle urchin viper vulture 
+wallaby walrus wasp weasel whale wildcat wildebeest wolverine woodpecker 
+wren yak zebra
+""".split()
+
+# Body parts and anatomy
+BODY_VOCABULARY = """
+abdomen ankle antler aorta appendage arch arm artery backbone belly bicep 
+bladder blood bone bowel brain breast brow buttock calf cartilage cell cheek 
+chest chin claw coccyx collarbone cornea cortex cranium crown dermis digit 
+ear elbow embryo entrails epidermis esophagus eye eyebrow eyelash eyelid 
+face fang feather femur fiber fin finger fingernail fist flesh foot forearm 
+forehead fur gall gills gland gonad groin gullet gum gut hair hamstring hand 
+haunch head heart heel hip hoof horn humerus hump intestine iris jaw joint 
+jugular kidney knee knuckle larynx leg lid limb lip liver lobe loin lung 
+mane mandible marrow maw membrane midriff molar mouth mucus muscle nape 
+navel neck nerve nipple nose nostril organ ovary palm pancreas paw pelvis 
+phallus pore pupil radius rectum retina rib rump scalp scapula scar shoulder 
+sinew skeleton skin skull snout sole spinal spine spleen sternum stomach 
+strand stubble stump synapse tail talons teeth temple tendon testicle thigh 
+thorax throat thumb thyroid tibia tissue toe tongue tonsil tooth torso 
+trachea trunk tusk udder ulna umbilical uterus uvula vein ventricle vertebra 
+vessel viscera waist whisker windpipe wing womb wrist
+""".split()
+
+# Textures and materials
+TEXTURE_VOCABULARY = """
+abrasive absorbent angular ashen barbed beaded beady beveled blistered 
+bloated blotchy braided bristly brittle bubbly bumpy burnished bushy buttery 
+calcified callused chalky chapped charred checkered chipped chunky clammy 
+clayey clear clogged cloudy clumpy coagulated coarse cobbled compacted 
+congealed corded corduroyed corky corroded corrugated cottony cracked 
+crackled cratered crazed creased creamy creased creped crimped crinkled 
+crisp crumbly crushed crusty crystalline curdled curly cushioned damp 
+dehydrated delicate dented dimpled dirty downy drenched dried dripping dry 
+dull dusty elastic embossed enameled engraved eroded faceted faded feathered 
+feathery felted fermented fibrous filmy fine flagstone flaky flat flaxen 
+fleshy flexible flinty floppy floury fluffy fluted foamy foliated foliage 
+frayed frazzled fretted fringed frothy frosted frozen furry furrowed fuzzy 
+gauzy gelatinous gilded glistening gloopy glossy gluey glutinous gnarled 
+gnarly goopy grainy granular granulated grated greasy gritty grooved grubby 
+gummy hairy hardened hazy honeycombed horny icy jagged jellied jelly knobbly 
+knotted knotty lacy lamellar laminated latticed leaden leafy leathery lichened 
+limp linen lintlike liquefied lissome lithic loamy lofty loose lopsided 
+lumpy lustrous luxuriant macular marbled marshy matted mealy meaty membranous 
+meshy metallic milky mineral miry misshapen moist moldy mossy mottled muddy 
+muddled murky mushy musty napped nappy netted nubby numbed oily oozy ossified 
+oxidized packed padded parchment pasty patchy patterned pearly pebbled 
+peeling pelted perforated petal petrous pillowy pimpled pitted plaited 
+plastic pleated plush pocked pockmarked polished porous potholed powdered 
+powdery prickly puckered pudgy puffy pulpy punctured quilted ragged rasping 
+ratty raveled raw reedy resinous ribbed ridged rigid rimed rippled roiled 
+ropy rotten rough rounded rubbery ruffled rugged rumpled runny russet rusted 
+rustic rutted sanded sandy satiny scabbed scabrous scalloped scaly scarred 
+scorched scraggly scraped scratched scratchy scruffy scummy scurfy seamed 
+seared seedy serrated shaggy shagreen shattered sheer shelled shiny shirred 
+shivered shredded shriveled shrubby silken silky silt silty silvered sinuous 
+skeletal skinned slatted sleek slick slimed slimy slippery sloppy sloshy 
+sludgy slushy smeared smoggy smoky smooth smudged snaggy snarled soaked 
+soapy sodden soft soggy soiled solid sooty sore soupy speckled spherical 
+spiked spiky spiny splotchy spongy spotted sprigged springy spun squashy 
+squelchy stained stalky starched starchy stiff stippled stitched stodgy 
+stony stranded strawy streaked streaky striated striped stubbled stubbly 
+studded stuffed stung stuffy stumpy succulent sueded sugary supple swampy 
+sweaty swollen tacky tangled tarnished tarry tattered tender tepid terraced 
+textured thick thickened thorny threadbare threaded thatched tiled tinselly 
+tired toasted toned tongued tooled toothed torn toughened trampled treacly 
+tremulous trickling trimmed tubular tufted tumid turbid turgid tweed twiggy 
+twilled twisted uneven unfinished unpolished upholstered varnished vascular 
+veined velvety venous verrucose viscid viscous vitreous vulcanized wadded 
+warped watered watery waved wavy waxen waxy weathered weedy welted wettened 
+whiskered wiggly wiry withered wizened wondrous wooded woolen woolly worn 
+woven wrinkled yeasty
+""".split()
+
+# Sensations and feelings
+SENSATION_VOCABULARY = """
+ache acrid acute agony alert alive alluring anguished anxious aroused 
+asleep astringent atingle awake balmy bitter blazing blinding blissful 
+bloated boiling bracing breathless breezy brisk bruised burning buzzing 
+calm captivated caressed chafed charmed chilled chilling clammy cleansed 
+coarse cold comforted comfortable comforting constricted cool cooling 
+cramped crawling crisp crushing cutting damp dazed deadened deafening 
+delicate delightful dense desiccated dizzy drained dreamy drowsy dry dull 
+ecstatic effervescent electric electrified elated energized engorged enraged 
+euphoric exasperated excited exhausted exhilarated famished fatigued feeble 
+fervent feverish fiery firm floating flushed freezing fresh frigid 
+fulfilled fuzzy giddy glacial glaring glowing gnawing grating greasy grimy 
+gritty grounded harsh healing heated heavenly heavy hollow hot humid hungry 
+hushed hypnotic icy immersed inflamed invigorated inviting irritated itching 
+itchy jarring jittery jolted keen kinetic languid lethargic light lightheaded 
+limp lively livid longing lulled luscious maddening magnetic mellow melting 
+moist muggy muted nauseated nauseous nettled nibbling nipping numb numbing 
+oppressive overheated overwhelmed painful palpitating parched peaceful 
+penetrating peppery perfumed pining pins-and-needles pleasurable pounding 
+pressing prickling prickly pulsating pungent quaking quenched quivering 
+radiant raging rasping raw reeling refreshed refreshing relaxed relaxing 
+relieved repulsive restless restoring revived rhythmic rigid rippling 
+roaring rough rumbling rushing rustic salty sated satiated saturated savorly 
+scalded scalding scathing scorched scorching scratchy searing sensual serene 
+sharp shattered shivering shocking silky sizzling sleepy slick slippery 
+sloppy slow sluggish smarting smoldering smooth smothered smothering snug 
+soaked sodden soft soothed soothing sore sorrowful sparkling spent spicy 
+splitting spongy stabbing stale starving steaming steamy sticky stiff 
+stifled stifling stinging stirred strained strangled streaming stressed 
+stretched stroked stroking strong stuffy stunned stupefied subtle suffocated 
+suffocating sultry sumptuous supple surging swaying sweaty swelling 
+sweltering swift swooning tart taut tender tense tepid terrible terrified 
+thirsty thorny throbbing thrumming thunderous tickling ticklish tight 
+tingling tired torpid touched touching tranquil trembling tremulous 
+twitching uncomfortable uneasy unnerved unwinding velvety vibrating vibrant 
+violent vitalized warm warped washed wasted watery weak weighted weighty 
+welcoming wet whipped wild winded windswept wobbly worn wounded wrenching 
+wretched writhing yearning zapped zesty zingy
+""".split()
+
+# Tastes and flavors
+FLAVOR_VOCABULARY = """
+acerbic acidic acrid aftertaste alkaline ambrosial appetizing aromatic 
+astringent balsamic biting bitter bland blistering bracing brackish briny 
+burnt buttery candied caramelized caustic charred cheesy chemical chocolatey 
+cinnamon citrus cloying coconut corky crisp crunchy delectable delicate 
+delicious divine doughy dry earthy eggy fermented fiery fishy flavorful 
+floral fragrant fresh fruity fudgy funky gamey garlicky gingery gooey 
+grassy gravy greasy grilled gritty harsh hearty herbaceous herbal honeyed 
+hoppy hot inedible insipid intense juicy lemony licorice lightly light 
+luscious malty medicinal mellow metallic mild milky mineral minty moldy 
+morish musky musty nasty nutmeg nutty oaky oily oniony organic overripe 
+palatable peppery perfumed pickled piquant plain plastic pleasant plummy 
+poignant puckering pulpy pungent putrid rancid raw refreshing resinous rich 
+ripe roasted robust rotting saccharine saline sapid salty saturated saucy 
+savory scorched sea seared seasoned sharp silky skunky smoky smooth soapy 
+soft soothing sour sparkling spiced spicy spoiled stale starchy steamy 
+stewed sticky stinging stringy strong succulent sugary sulfurous sweet 
+syrupy tangy tart tasteless tasty tepid tinny toasted toasty tongue-numbing 
+toxic treacly umami unappetizing unpalatable unsalted unsavory vanilla vegetal 
+velvety vinegary virulent watered-down watery weak wild woody yeasty zesty 
+zippy
+""".split()
+
+# Colors and hues
+COLOR_VOCABULARY = """
+alabaster amber amethyst apricot aqua aquamarine arctic ash auburn azure 
+beige beryl bisque black blonde blood blush bone bordeaux brass brick 
+bronze brown buff burgundy burnt butterscotch cadet camel camouflage canary 
+candy caramel cardinal carmine carnation celadon celeste cerise cerulean 
+chalk champagne charcoal chartreuse cherry chestnut chocolate chrome cider 
+cinnabar cinnamon citrine citron claret clay coal cobalt cocoa coffee 
+cognac copper coral cordovan corn cornflower cornsilk cosmic cranberry 
+cream crimson crystal cyan daffodil damask dandelion dapple dark dawn 
+denim desert dim drab dusk dusty ebony ecru eggplant eggshell electric 
+emerald faded fawn fern fire flame flamingo flax flesh flora fluorescent 
+forest fuchsia garnet ginger glacier glaucous gold golden granite grape 
+graphite grass gray green grey gunmetal hazel heather heliotrope hemp 
+henna hickory honey honeydew hot hunter hyacinth ice indigo iris iron 
+ivory jade jasmine jasper jet juniper kelly khaki lapis lavender lemon 
+light lilac lime linen magenta mahogany maize malachite mandarin mango 
+maple maroon mauve melon mercury midnight mint mocha molten moss mulberry 
+mustard navy neon neutral night noir nude oat ocher ochre olive onyx 
+opal orange orchid oxford oyster pale paprika peach peacock pear pearl 
+periwinkle persimmon pewter pine pink pistachio pitch platinum plum powder 
+primrose prune puce pumpkin purple quartz raspberry raven red redwood 
+rose rosewood rosy rouge royal ruby russet rust sable saffron sage salmon 
+sand sangria sapphire scarlet seashell sepia shadow shamrock shell sienna 
+silver sky slate sleet smoke snow sorrel steel stone straw strawberry 
+sunflower sunny sunset tan tangerine taupe tawny teal terracotta thistle 
+thyme tiger timber toast tobacco tomato topaz tropical turquoise ultramarine 
+umber umber vanilla verdigris vermillion violet viridian walnut watermelon 
+wheat white wine wintergreen wisteria wood xanthic yellow zinc
+""".split()
+
+# Natural elements and phenomena
+NATURE_VOCABULARY = """
+afterglow algae altitude amber ambergris archipelago asteroid atmosphere 
+aurora avalanche badlands bank basin bay beach bedrock berg biome blizzard 
+bloom bog boulder branch breeze brine brook butte caldera canyon cape 
+cascade cataract cavern chasm cirque clay clearing cliff cloud coast 
+coastline comet confluence continent coral cove crater creek crest crevasse 
+crevice current cyclone dale dam dawn delta desert dew divide dome downpour 
+driftwood drizzle drought dune dusk dust earthquake echo eddy embankment 
+ember equator erosion escarpment estuary evergreen extinction falls fault 
+fauna fen fern field fjord flood flora flurry foam fog foothill forest 
+formation fossil fountain freshwater frond frost fungi gale galaxy garden 
+geyser glacier glade glen gorge granite grassland gravel grove gulf gust 
+hail harbor haven heath haze headland headwater highland hill hillside 
+horizon hot-spring hurricane ice iceberg icecap inlet island isthmus 
+jungle kelp knoll lagoon lake landmass landslide lava lawn lea ledge 
+lightning loam lowland magma mangrove marsh marshland meadow meander mesa 
+mist monsoon moon moonbeam moonlight moraine morass moss mound mountain 
+mountaintop mud mudflat muskeg nebula oasis ocean outcrop overhang oxbow 
+pass pasture peak peat peninsula permafrost piedmont pine plain planet 
+plateau playa plume pond pool prairie precipice promontory puddle quarry 
+quartz quicksand rain rainbow rainforest range rapids ravine reef ridge 
+rift riparian river riverbed rivulet rock rockfall rubble runoff sand 
+sandbar sandstone savanna scarp scree scrub sea seafloor seam seascape 
+seashore season sediment shade shelf shoal shore shoreline shrub sierra 
+silt sinkhole sky sleet slope slush smog smoke snow snowcap snowdrift 
+snowfall snowfield snowflake snowmelt snowpack soil solstice sound source 
+spring sprout squall stalactite stalagmite star steam steppe stone strait 
+strand stratum stream streambed stump summit sun sunbeam sunlight sunrise 
+sunset sunshine surf surge swale swamp swell taiga tarn tempest terrace 
+thaw thicket thunder thunderhead tide tideland tidepool timber timberline 
+tor tornado torrent tract tree trench tributary trough tsunami tundra 
+undergrowth undertow upland updraft vale valley vapor vegetation veld 
+volcano wake waterfall watershed waterspout wave wetland whirlpool wild 
+wildfire wilderness wind windstorm woodland woods wrack
+""".split()
+
+# Emotions and mental states  
+EMOTION_VOCABULARY = """
+abhorrence admiration adoration affection agitation alarm alienation 
+amazement ambivalence amusement anger annoyance anticipation antipathy 
+anxiety apathy apprehension ardor arousal astonishment attraction aversion 
+awe bewilderment bitterness bliss boredom calm certainty chagrin cheerfulness 
+clarity closeness coldness comfort compassion complacency compunction concern 
+confidence confusion consternation contempt contentment courage cowardice 
+craving curiosity cynicism dazzlement defeat defiance dejection delight 
+denial depression derangement desire desolation despair despondency 
+detachment determination devastation devotion disappointment disbelief 
+discomfort discontent disdain disgrace disgust disillusionment dismay 
+disorientation displeasure dissatisfaction distraction distress distrust 
+doubt dread eagerness earnestness ease ecstasy edginess elation 
+embarrassment empathy emptiness enchantment encouragement enjoyment ennui 
+enthusiasm envy equanimity euphoria exasperation excitement exhaustion 
+exhilaration expectancy exuberance faith fascination fatigue fear ferocity 
+fervency fervor fondness foreboding frenzy fright frustration fulfillment 
+fury gaiety gladness gloom gloating glumness gratification gratitude greed 
+grief grudge guilt gusto happiness hate hatred helplessness hesitancy 
+homesickness hope hopelessness horror hostility humiliation hunger hurt 
+hysteria idolatry impatience incredulity indifference indignation infatuation 
+insecurity inspiration intimidation intrigue irritation isolation jealousy 
+jitters jollity joy jubilation kindness lethargy levity liberation 
+liveliness loathing loneliness longing love lust malaise malevolence 
+malice marvel melancholy mellowness menace merriment mirth misery mistrust 
+modesty mortification motivation mourning neediness negativity nervousness 
+nihilism nostalgia nothingness numbness obsession offense optimism outrage 
+overwhelm panic paranoia passion pathos patience peacefulness pensiveness 
+perplexity perturbation pessimism piety pity pleasure possessiveness 
+powerlessness pride puzzlement rage rapture reassurance regret rejection 
+relaxation relief reluctance remorse repentance repulsion resentment 
+resignation resolve restlessness reverence revulsion romance ruthlessness 
+sadness satisfaction scorn security self-pity self-satisfaction sensation 
+sensitivity sentimentality serenity shame shock shyness skepticism smugness 
+somberness sorrow spite stagnation stillness stress stubbornness stupefaction 
+submission suffering sullenness surprise suspense suspicion sympathy 
+temptation tenderness tension terror thankfulness thrill timidity tolerance 
+torment tranquility tribulation triumph troubledness trust turbulence 
+uncertainty unease unhappiness upset urgency valor vanity vengeance vexation 
+vigilance vulnerability wanderlust wariness warmth weariness whimsy 
+wistfulness withdrawal woe wonder worry wrath yearning zeal zest
+""".split()
+
+# Sounds and acoustics
+SOUND_VOCABULARY = """
+babble bang bark bawl bay beat bellow blare blast bleat boom bray bubble 
+bump burble burp buzz cackle call caterwaul chant chatter cheep chime 
+chink chirp chirrup clack clang clank clap clash clatter click clink clip 
+clop cluck clunk cooing crackle crash creak croak crow crump crunch cry 
+din ding discord drone drone droning drum echo fizz flutter gasp giggle 
+gnash grate grinding groan growl grumble grunt gurgle hiss honk hoot howl 
+hum hubbub jangle jingle keen knock lilt lowing mewl moan muffle mumble 
+murmur mutter neigh noise outcry patter peal peep ping pipe plonk plop 
+plunk pop pounding prattle purr quack racket rap rasp rattle resonance 
+reverberation ring ripple roar roll rumble rustle scream screech shriek 
+shuffle sigh silence sing siren sizzle slam slap slosh slurp smack snap 
+snarl sniff sniffle snore snort sob song splash splatter splutter sputter 
+squall squawk squeak squeal squelch stammer static stridor strum swish 
+swoosh thrum thud thump thunder tick tinkle toll tone toot trill trumpet 
+tumult twang tweet twitter ululation uproar vibration wail warble whack 
+wheeze whimper whine whinny whisper whistle whoop whir whoosh yelp yodel 
+yowl zap zip zoom
+""".split()
+
+# Actions and movements
+ACTION_VOCABULARY = """
+absorb accelerate accumulate achieve activate adapt adhere adjust advance 
+agitate align alter amplify anchor animate approach arch arise arrange 
+ascend assemble assert attract awaken balance bathe bend bind blast blend 
+blink bloom blow bob bolt bounce bow brace branch break breathe brew bridge 
+bristle broadcast brush buckle bud build bulge bundle burn burst bury 
+caress carry carve cascade cast catch center chain change channel charge 
+chase churn circle clamp clasp claw cleanse clear cleave cling close 
+cluster coalesce coast coil collapse collect collide combine combust 
+compact compel compress conceal concentrate condense conduct confine 
+congregate connect consume contain continue contract converge convey convulse 
+coil corrupt couple cover crack crackle crash crawl create creep crisp 
+crook cross crouch crumble crumple crush crystallize curl curve cushion 
+cut dance dart dash decay deepen deflect deform delay deliver demolish 
+depart deposit descend desert detach devour diffuse dig dilate dim dip 
+direct discharge disconnect disperse dispel display dissolve distend 
+distort distribute dive diverge divert divide dock dodge dominate drag 
+drain drape draw dredge drench drift drill drink drip drive droop drop 
+drown dull dump duplicate dwell dwarf echo edge eject elaborate elude 
+emanate embark embed embrace emerge emit empty encircle enclose encompass 
+engulf enlarge enter entomb entwine envelop erase erode erupt escape 
+evade evaporate evolve excavate excite exclude execute exhale exhaust 
+expand expel explode explore expose extend extract exude fade fall fan 
+fasten feed ferment fill filter find fire fix flame flap flare flash 
+flatten flee flex flick flinch fling flip flit float flock flood flow 
+flourish fluctuate flush flutter fly foam focus fold follow force forge 
+form formulate fracture fragment freeze fret fry fume funnel furl fuse 
+gain gallop gape garner gasp gather generate germinate gesture gild give 
+glance glare gleam glide glimmer glint glisten glitter glow gnaw gouge 
+govern grab graft grasp grate graze greet grind grip grope grovel grow 
+guide gulp gush gyrate halt hammer handle hang harden harness harvest 
+hasten haul heal heap heave hide hinder hinge hit hoard hold hollow hook 
+hop host hover hug hurl hurtle ignite illuminate immerse impale implode 
+imprint incise incline include increase indent induce infect infiltrate 
+inflate inflict inhabit inhale inject insert inspect inspire install 
+integrate intensify interlock intertwine interweave introduce invade invert 
+investigate isolate jab jangle jar jerk jet jiggle jolt jostle journey 
+juggle jump kick kindle kiss knead kneel knit knock knot lace land lap 
+lash latch launch layer lead leak lean leap leave level lever liberate 
+lick lift light lighten linger link liquefy list listen litter live load 
+loaf lodge loop loose loosen lower lug lull lumber lunge lurch lurk magnify 
+make manifest manipulate march mark mash mass massage mature meander measure 
+meet meld melt merge mesh migrate mingle mirror mist mix mobilize mold 
+mount move multiply muffle murmur mushroom mutate navigate nest nestle 
+nibble nod notch nourish nudge nurture observe occupy occur offend offer 
+open operate orbit organize oscillate ooze overcome overflow overhang 
+overlap overrun overtake overturn overwhelm pace pack paddle paint pair 
+palpitate pan parade paralyze part partition pass paste pat patch patrol 
+pause peck peel peep peer penetrate perch percolate permeate persist 
+pervade pierce pile pinch pitch place plant plaster pleat pledge plod 
+plop plot pluck plug plummet plunder plunge ply pocket point poise polish 
+pollinate ponder pool pop portion pose position possess pound pour power 
+practice praise prance precede precipitate preoccupy prepare press prevail 
+prevent prick prime probe proceed process procure prod produce progress 
+project proliferate prolong prompt propel protect protrude provide prowl 
+pry puff pull pulp pulsate pulse pump punch puncture purge purify pursue 
+push quake quarry quash quaver quell quest quiver radiate raid rain raise 
+rake rally ramble rampage range rankle rant rattle ravage ravel reach 
+reap rear rebound recede receive reclaim recline recognize recoil recover 
+recreate recur redden reduce reel reflect refract refresh regain regenerate 
+register reign reinforce reject rejoin rejoice relapse relax release 
+relent relieve relinquish remain remake remember remove render renew 
+repair repel replace replenish repose represent repress reproduce repulse 
+request require rescue research reside resist resolve resonate respond 
+rest restore restrain retain retard retract retreat retrieve return reveal 
+reverberate reverse review revise revive revolve reward rid riddle ride 
+rifle rig rim ring rinse ripple rise risk rival roam roar rock roll romp 
+root rotate rouse route rove rub ruffle ruin rumble rummage run rupture 
+rush rust sack sacrifice sail salvage sample sanctify sand sap saturate 
+save savor saw scale scan scar scatter scavenge scoop scorch scour scout 
+scowl scramble scrape scratch scrawl scream screen scribble scrub scrutinize 
+scuffle sculpt scurry seal search sear season seat seclude secure seduce 
+seep seethe seize select send sense separate sequester serve set settle 
+sever shade shadow shake shatter shear shed shelter shield shift shimmer 
+shine shiver shock shoot shorten shove show shower shred shriek shrink 
+shrivel shroud shrug shudder shuffle shun shut shuttle sift sigh signal 
+simmer sing sink sip siphon sit situate skate sketch skid skim skip skirt 
+skulk slam slant slap slash slate slaughter sleep slice slide sling slink 
+slip slit slither slope slosh slouch slow sluice slump smack smash smear 
+smell smelt smile smirk smoke smolder smooth smother snap snare snarl 
+snatch sneak sniff snip snoop snore snort snow snub snuff snuggle soak 
+soar sob soften soil soldier solidify solve somersault soothe sort sound 
+sow space span spark sparkle spatter spawn speak spear specialize speck 
+speed spell spend spew spice spill spin spiral spit splash splatter splice 
+splinter split spoil sponge spoon sport spot spout sprawl spray spread 
+spring sprinkle sprint sprout spurt sputter squander square squash squat 
+squawk squeeze squelch squint squirm stab stabilize stack stagger stain 
+stake stall stamp stand staple stare start startle starve stash station 
+stay steady steal steam steer stem step stew stick stiffen stifle still 
+stimulate sting stink stipple stir stitch stock stomp stoop stop store 
+storm straddle strafe strain strand strangle strap stray streak stream 
+strengthen stress stretch strew stride strike string strip strive stroke 
+stroll strut structure struggle strut study stuff stumble stump stun 
+stupefy stutter subdue submerge submit subside substitute subtract succeed 
+succumb suck suffer suffocate suggest suit summon sunbathe superimpose 
+supervise supplement supply support suppress surface surge surmount surpass 
+surround survey survive suspend sustain swab swaddle swagger swallow swamp 
+swap swarm sway swear sweat sweep swell swerve swift swim swing swipe swirl 
+switch swoop symbolize
+tackle tag tail tailor take talk tame tamp tamper tangle tap taper target 
+tarnish taste taunt tear tease telegraph telescope temper tempt tend tense 
+terminate terrify test tether thaw thicken thin think thrash thread 
+threaten thresh thrive throb throttle throw thrust thud thump thunder 
+thwart tickle tie tighten tilt tingle tinkle tip tiptoe tire toast toddle 
+toil toll tone toot topple torment torpedo toss total totter touch tour 
+tousle tow tower trace track trade trail train trample transcend transfer 
+transform transgress translate transmit transport trap travel traverse 
+trawl tread treat trek tremble trend trespass trick trickle trigger trim 
+trip triumph trod troop trot trouble trudge trumpet trundle trust try tuck 
+tug tumble tunnel turn turtle tweak twine twinkle twirl twist twitch 
+twitter type
+unbind unbutton unchain uncloak uncoil uncork uncover uncurl undercut 
+undergo underline undermine understand undertake undo undress undulate 
+unearth unfasten unfold unfurl unhinge unite unknot unlace unlatch unleash 
+unload unlock unmask unpack unpick unplug unravel unroll unseal unsettle 
+untangle untie unveil unwind unwrap upend upgrade uphold uplift uproot 
+upset upstage upturn urge use usher usurp utter
+vacate vacuum validate vanish vanquish vaporize vault veer veil vent 
+venture verify vex vibrate vie view vindicate violate visit visualize 
+vitalize vocalize voice void volley volunteer vomit vote vouch vow voyage
+wade waft wager waggle wail wait wake walk wallow wander wane want warble 
+ward warm warn warp warrant wash waste watch water wave waver wax weaken 
+wean wear weary weather weave wedge weed weep weigh welcome weld well 
+wet whack whale wham wheel whet whimper whine whinny whip whir whirl 
+whisk whisper whistle whittle whiz whoop widen wield wiggle wilt wince 
+wind wink winnow wipe wish withdraw wither witness wobble wolf wonder 
+woo work worm worry worship wound wrap wreak wreath wreathe wreck wrench 
+wrest wrestle wriggle wring wrinkle write writhe
+yank yap yawn yearn yell yelp yield yodel yowl
+zap zero zigzag zip zone zoom
+""".split()
+
+
+class SemanticWordMatcher:
+    """
+    Fast image-to-words matching using CLIP embeddings and a vocabulary database.
+    Much faster than Vision LLM - embeds image once, compares against pre-computed word embeddings.
+    Uses FAISS for fast approximate nearest neighbor search when available.
+    """
+    
+    def __init__(
+        self,
+        vocabulary: Optional[List[str]] = None,
+        clip_model: str = "ViT-B/32",
+        device: Optional[str] = None,
+        cache_path: Optional[str] = None,
+        use_faiss: bool = True,
+    ):
+        """
+        Args:
+            vocabulary: List of words to use. If None, uses all vocabulary lists (~4000 words)
+            clip_model: CLIP model to use
+            device: Device for computation
+            cache_path: Path to cache word embeddings
+            use_faiss: Use FAISS for fast similarity search (recommended)
+        """
+        import torch
+        import hashlib
+        
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        # Combine all vocabularies for rich semantic matching
+        self.vocabulary = vocabulary or (
+            DEFAULT_VOCABULARY + ARCHETYPE_VOCABULARY + 
+            ANIMAL_VOCABULARY + BODY_VOCABULARY + 
+            TEXTURE_VOCABULARY + SENSATION_VOCABULARY + 
+            FLAVOR_VOCABULARY + COLOR_VOCABULARY + 
+            NATURE_VOCABULARY + EMOTION_VOCABULARY + 
+            SOUND_VOCABULARY + ACTION_VOCABULARY
+        )
+        self.vocabulary = sorted(set(self.vocabulary))  # Remove duplicates and sort for consistent caching
+        self.clip_model_name = clip_model
+        # Default to static folder so cache can be committed to repo
+        self.cache_path = cache_path or str(Path(__file__).parent / "static" / "word_embeddings.npy")
+        self.use_faiss = use_faiss
+        
+        # Ensure cache directory exists
+        Path(self.cache_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        self._clip_model = None
+        self._clip_preprocess = None
+        self._word_embeddings = None
+        self._faiss_index = None
+        self._word_to_idx = {w: i for i, w in enumerate(self.vocabulary)}
+        
+        # Create a STABLE hash of vocabulary for cache validation (hashlib, not Python hash())
+        vocab_str = "|".join(self.vocabulary) + "|" + clip_model
+        self._vocab_hash = hashlib.md5(vocab_str.encode()).hexdigest()
+        
+    def _ensure_loaded(self):
+        """Lazy load CLIP model and word embeddings."""
+        # Check if already fully loaded
+        if self._clip_model is not None and self._word_embeddings is not None:
+            return
+            
+        try:
+            import clip
+            import torch
+            
+            # Try to load cached word embeddings FIRST (before loading CLIP model)
+            cache_loaded = False
+            if self._word_embeddings is None and self.cache_path and Path(self.cache_path).exists():
+                try:
+                    cache = np.load(self.cache_path, allow_pickle=True).item()
+                    # Use vocab_hash for faster comparison
+                    cached_hash = cache.get("vocab_hash")
+                    if cached_hash == self._vocab_hash and cache.get("model") == self.clip_model_name:
+                        self._word_embeddings = cache["embeddings"]
+                        cache_loaded = True
+                        print(f"[SemanticMatcher] Loaded cached word embeddings ({len(self.vocabulary)} words)", flush=True)
+                    elif cache.get("model") != self.clip_model_name:
+                        print(f"[SemanticMatcher] Cache model mismatch, will recompute", flush=True)
+                    else:
+                        print(f"[SemanticMatcher] Cache vocabulary changed, will recompute", flush=True)
+                except Exception as e:
+                    print(f"[SemanticMatcher] Cache load failed: {e}", flush=True)
+            
+            # Load the CLIP model if not already loaded
+            if self._clip_model is None:
+                print(f"[SemanticMatcher] Loading CLIP model {self.clip_model_name}...", flush=True)
+                self._clip_model, self._clip_preprocess = clip.load(self.clip_model_name, device=self.device)
+            
+            if not cache_loaded and self._word_embeddings is None:
+                # Compute word embeddings - batch to avoid memory issues
+                print(f"[SemanticMatcher] Computing embeddings for {len(self.vocabulary)} words (one-time)...", flush=True)
+                
+                # CLIP can only tokenize so many words at once, batch them
+                batch_size = 500
+                all_features = []
+                
+                with torch.no_grad():
+                    for i in range(0, len(self.vocabulary), batch_size):
+                        batch = self.vocabulary[i:i+batch_size]
+                        text_tokens = clip.tokenize(batch, truncate=True).to(self.device)
+                        text_features = self._clip_model.encode_text(text_tokens)
+                        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+                        all_features.append(text_features.cpu())
+                
+                self._word_embeddings = torch.cat(all_features, dim=0).numpy()
+                print(f"[SemanticMatcher] Computed {self._word_embeddings.shape[0]} word embeddings", flush=True)
+                
+                # Cache for next time
+                try:
+                    np.save(self.cache_path, {
+                        "vocab_hash": self._vocab_hash,
+                        "model": self.clip_model_name,
+                        "embeddings": self._word_embeddings,
+                        "vocab_size": len(self.vocabulary)
+                    })
+                    print(f"[SemanticMatcher] Cached word embeddings to {self.cache_path}", flush=True)
+                except Exception as e:
+                    print(f"[SemanticMatcher] Failed to cache: {e}", flush=True)
+            
+            # Build FAISS index for fast similarity search
+            if self.use_faiss and self._faiss_index is None and self._word_embeddings is not None:
+                self._build_faiss_index()
+            
+            # Final check - ensure embeddings are loaded
+            if self._word_embeddings is None:
+                raise RuntimeError("Failed to load or compute word embeddings")
+                        
+        except ImportError as e:
+            raise ImportError(f"CLIP is required for SemanticWordMatcher. Install with: pip install git+https://github.com/openai/CLIP.git. Error: {e}")
+    
+    def _build_faiss_index(self):
+        """Build FAISS index for fast nearest neighbor search."""
+        try:
+            import faiss
+            
+            # Normalize embeddings for cosine similarity (use inner product on normalized vectors)
+            embeddings = self._word_embeddings.astype(np.float32)
+            faiss.normalize_L2(embeddings)
+            
+            # Get embedding dimension
+            d = embeddings.shape[1]
+            
+            # For ~4000 words, a flat index is fine and exact
+            # For larger vocabularies (10k+), use IVF index
+            if len(self.vocabulary) > 10000:
+                # IVF index for large vocabularies
+                nlist = min(100, len(self.vocabulary) // 40)  # Number of clusters
+                quantizer = faiss.IndexFlatIP(d)
+                self._faiss_index = faiss.IndexIVFFlat(quantizer, d, nlist, faiss.METRIC_INNER_PRODUCT)
+                self._faiss_index.train(embeddings)
+                self._faiss_index.add(embeddings)
+                self._faiss_index.nprobe = 10  # Search 10 clusters
+                print(f"[SemanticMatcher] Built FAISS IVF index ({len(self.vocabulary)} words, {nlist} clusters)", flush=True)
+            else:
+                # Flat index for smaller vocabularies (exact search, still very fast)
+                self._faiss_index = faiss.IndexFlatIP(d)  # Inner product = cosine sim on normalized vectors
+                self._faiss_index.add(embeddings)
+                print(f"[SemanticMatcher] Built FAISS flat index ({len(self.vocabulary)} words)", flush=True)
+                
+        except ImportError:
+            print("[SemanticMatcher] FAISS not installed, using numpy fallback. Install with: pip install faiss-cpu", flush=True)
+            self._faiss_index = None
+    
+    def get_image_embedding(self, image_path: str) -> np.ndarray:
+        """Get CLIP embedding for an image."""
+        import torch
+        
+        self._ensure_loaded()
+        
+        if Image is None:
+            raise ImportError("PIL is required for image processing")
+        
+        img = Image.open(image_path).convert("RGB")
+        img_tensor = self._clip_preprocess(img).unsqueeze(0).to(self.device)
+        
+        with torch.no_grad():
+            image_features = self._clip_model.encode_image(img_tensor)
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        
+        return image_features.cpu().numpy()[0]
+    
+    def find_similar_words(
+        self, 
+        image_path: str, 
+        top_k: int = 100,
+        return_scores: bool = False
+    ) -> Union[List[str], List[Tuple[str, float]]]:
+        """
+        Find top-k most similar words to an image using CLIP.
+        Uses FAISS for fast approximate nearest neighbor search when available.
+        
+        Args:
+            image_path: Path to image
+            top_k: Number of words to return
+            return_scores: If True, return (word, score) tuples
+            
+        Returns:
+            List of words or (word, score) tuples
+        """
+        self._ensure_loaded()
+        
+        image_emb = self.get_image_embedding(image_path)
+        
+        # Use FAISS if available for fast search
+        if self._faiss_index is not None:
+            import faiss
+            # Normalize query for cosine similarity
+            query = image_emb.astype(np.float32).reshape(1, -1)
+            faiss.normalize_L2(query)
+            
+            # Search top-k nearest neighbors
+            scores, indices = self._faiss_index.search(query, top_k)
+            
+            if return_scores:
+                return [(self.vocabulary[i], float(scores[0][j])) for j, i in enumerate(indices[0])]
+            else:
+                return [self.vocabulary[i] for i in indices[0]]
+        else:
+            # Numpy fallback
+            similarities = image_emb @ self._word_embeddings.T
+            top_indices = np.argsort(similarities)[-top_k:][::-1]
+            
+            if return_scores:
+                return [(self.vocabulary[i], float(similarities[i])) for i in top_indices]
+            else:
+                return [self.vocabulary[i] for i in top_indices]
+    
+    def describe_image_with_llm(
+        self,
+        image_path: str,
+        top_k: int = 100,
+        llm_refiner: Optional['LLMArchetypeRefiner'] = None,
+        num_final_words: int = 20,
+    ) -> str:
+        """
+        Get image description by:
+        1. Finding top-k similar words via CLIP
+        2. Having LLM select and compose the most relevant/interesting ones
+        
+        Args:
+            image_path: Path to image
+            top_k: Number of candidate words from CLIP
+            llm_refiner: LLM to use for curation (uses Cloudflare if None)
+            num_final_words: Target number of words in final description
+            
+        Returns:
+            Curated description string
+        """
+        # Get candidate words
+        word_scores = self.find_similar_words(image_path, top_k=top_k, return_scores=True)
+        
+        # Format for LLM
+        word_list = ", ".join([f"{w} ({s:.2f})" for w, s in word_scores[:50]])  # Top 50 with scores
+        
+        prompt = f"""You are a semantic curator. Given these words that are visually/conceptually similar to an image (with similarity scores), select and combine the {num_final_words} most evocative and interesting words that would best describe the image's essence.
+
+CANDIDATE WORDS (with similarity scores):
+{word_list}
+
+INSTRUCTIONS:
+1. Choose words that create a coherent, evocative description
+2. Prefer rare, specific, and poetic words over common ones
+3. Mix concrete and abstract concepts
+4. Return ONLY the selected words as a comma-separated list
+5. Do not add any other text or explanation
+
+SELECTED WORDS:"""
+
+        if llm_refiner is None:
+            # Use simple Cloudflare LLM call
+            from enhanced_miner import LLMArchetypeRefiner
+            llm_refiner = LLMArchetypeRefiner(backend="cloudflare")
+        
+        try:
+            # Call the appropriate backend method
+            messages = [{"role": "user", "content": prompt}]
+            if llm_refiner.backend == "cloudflare":
+                response = llm_refiner._call_cloudflare(messages, max_tokens=256)
+            else:
+                response = llm_refiner._call_local(messages, max_tokens=256)
+            # Clean up response
+            words = [w.strip() for w in response.split(",")]
+            words = [w for w in words if w and len(w) > 2]
+            return ", ".join(words[:num_final_words])
+        except Exception as e:
+            print(f"[SemanticMatcher] LLM curation failed: {e}", flush=True)
+            # Fallback: return top words directly
+            return ", ".join([w for w, s in word_scores[:num_final_words]])
+    
+    def batch_describe(
+        self,
+        image_paths: List[str],
+        top_k: int = 100,
+        llm_refiner: Optional['LLMArchetypeRefiner'] = None,
+        num_final_words: int = 20,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> Dict[str, str]:
+        """
+        Describe multiple images efficiently.
+        
+        Returns:
+            Dict mapping image_path -> description
+        """
+        self._ensure_loaded()
+        results = {}
+        
+        for i, path in enumerate(image_paths):
+            try:
+                desc = self.describe_image_with_llm(
+                    path, 
+                    top_k=top_k, 
+                    llm_refiner=llm_refiner,
+                    num_final_words=num_final_words
+                )
+                results[path] = desc
+            except Exception as e:
+                print(f"[SemanticMatcher] Error describing {path}: {e}", flush=True)
+                results[path] = ""
+            
+            if progress_callback:
+                progress_callback(i + 1, len(image_paths))
+        
+        return results
+
+
+# ============================================================
 # Vision LLM Image Describer
 # ============================================================
 
@@ -448,22 +1474,40 @@ class VisionDescriber:
                 "or add them to .streamlit/secrets.toml"
             )
         
-        # Convert image to base64
-        image_b64 = self._image_to_base64(image_path)
+        # Convert image to bytes (resize if needed)
+        path = Path(image_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
+        
+        if Image is not None:
+            img = Image.open(path)
+            max_size = 1024
+            if max(img.size) > max_size:
+                ratio = max_size / max(img.size)
+                new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+            if img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+            import io
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=85)
+            image_bytes = buffer.getvalue()
+        else:
+            image_bytes = path.read_bytes()
+        
+        # Encode as base64 for the JSON payload
+        import base64
+        image_b64 = base64.b64encode(image_bytes).decode('utf-8')
         
         url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{self.model}"
         
-        # Cloudflare vision API format
+        # Cloudflare Workers AI LLaVA format
+        # image: array of integers 0-255 representing bytes
+        # prompt: text prompt
         payload = {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": self.prompt
-                }
-            ],
-            "image": image_b64,
+            "prompt": self.prompt,
+            "image": list(image_bytes),  # Convert bytes to list of integers
             "max_tokens": 256,
-            "temperature": 0.7,
         }
         
         headers = {
@@ -471,16 +1515,20 @@ class VisionDescriber:
             "Content-Type": "application/json",
         }
         
+        print(f"[Vision] Sending request, image array length: {len(payload['image'])}, first bytes: {payload['image'][:10]}", flush=True)
+        
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=60)
             response.raise_for_status()
-            data = response.json()
+            result = response.json()
             
-            if not data.get("success"):
-                errors = data.get("errors", [])
+            if not result.get("success"):
+                errors = result.get("errors", [])
                 raise RuntimeError(f"Cloudflare API error: {errors}")
             
-            description = data.get("result", {}).get("response", "").strip()
+            # Output field is 'description' according to API schema
+            description = result.get("result", {}).get("description", "").strip()
+            print(f"[Vision] Got description: {description[:100] if description else 'empty'}...", flush=True)
             
             # Cache the result
             if description:
@@ -490,6 +1538,14 @@ class VisionDescriber:
             
         except requests.exceptions.Timeout:
             raise RuntimeError("Vision API timeout. Try again or use a smaller image.")
+        except requests.exceptions.HTTPError as e:
+            # Get more details from the response
+            error_detail = ""
+            try:
+                error_detail = e.response.text[:500]
+            except:
+                pass
+            raise RuntimeError(f"Vision API request failed: {e}. Details: {error_detail}")
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Vision API request failed: {e}")
     
@@ -692,7 +1748,99 @@ class LLMArchetypeRefiner:
             out = mdl.generate(**inputs, max_new_tokens=max_tokens, temperature=0.7, do_sample=True)
         
         return tok.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-    
+    def refine_directional(
+        self, 
+        all_concepts: List[str], 
+        filters: List[str],
+        semantic_spread: float = 0.5
+    ) -> Dict[str, List[str]]:
+        
+        # 1. Prepare Concept Soup (Only single words now)
+        unique_concepts = list(set(all_concepts))
+        import random
+        random.shuffle(unique_concepts)
+        concepts_text = ", ".join(unique_concepts[:400]) 
+
+        filters_text = ", ".join(filters)
+
+        prompt = f"""Synthesize Abstract Archetypes.
+
+    FILTERS (The Containers):
+    {filters_text}
+
+    CORPUS INGREDIENTS:
+    {concepts_text}
+
+    TASK:
+    Create one Archetype for each Filter.
+    - NAME: Abstract, 1-2 words. NO "THE".
+    - DESCRIPTORS: 8-13 single words PER ARCHETYPE. Each descriptor must be a rare or evocative word.
+    - NO word may appear in more than one archetype (all descriptors must be unique across archetypes).
+
+    Output JSON only."""
+
+        messages = [
+            {"role": "system", "content": DIRECTIONAL_ARCHETYPE_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
+
+        try:
+            if self.backend == "cloudflare":
+                response = self._call_cloudflare(messages, max_tokens=2048)
+            else:
+                response = self._call_local(messages, max_tokens=2048)
+            
+            return self._parse_directional_response(response, filters)
+        except Exception as e:
+            print(f"Directional refinement failed: {e}")
+            return {f: ["error"] for f in filters}
+
+    def _parse_directional_response(self, response: str, expected_filters: List[str]) -> Dict[str, List[str]]:
+        """
+        Parse response and enforce cleaning rules: No 'The', No Multi-word descriptors.
+        """
+        response = response.strip()
+        if "```json" in response:
+            match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if match: response = match.group(1)
+        elif "```" in response:
+            match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
+            if match: response = match.group(1)
+            
+        try:
+            data = json.loads(response)
+            result = {}
+            
+            for arch in data.get("archetypes", []):
+                raw_name = arch.get("name", "").strip().upper()
+                
+                # RULE 1: Remove leading "THE "
+                if raw_name.startswith("THE "):
+                    raw_name = raw_name[4:]
+                
+                # RULE 2: Enforce Single Word Descriptors
+                raw_descriptors = [str(d).lower().strip() for d in arch.get("descriptors", [])]
+                clean_descriptors = []
+                for d in raw_descriptors:
+                    # If it has a space, it's a phrase -> Skip it
+                    if " " in d:
+                        continue
+                    # If it's too short, skip it
+                    if len(d) < 3:
+                        continue
+                    clean_descriptors.append(d)
+                
+                # Enforce Max 13 descriptors (and implied Min through generation)
+                clean_descriptors = clean_descriptors[:13]
+
+                if raw_name and clean_descriptors:
+                    result[raw_name] = clean_descriptors
+            
+            return result
+        except Exception as e:
+            print(f"JSON Parse Error: {e}")
+            return {}
+   
     def _generate_single_archetype(self, cluster_id: int, concepts: List[str], existing_words: set, semantic_spread: float = 0.5) -> Dict:
         """Generate descriptors for a single cluster, avoiding already-used words.
         
@@ -1490,7 +2638,7 @@ class EnhancedArchetypeMiner:
         all_phrases = []
         for text in texts:
             # Simple extraction: words and 2-grams
-            words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
+            words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower()) # Min length 4 to skip noise
             all_phrases.extend(words)
             # 2-grams
             for i in range(len(words) - 1):
@@ -1523,21 +2671,76 @@ class EnhancedArchetypeMiner:
             'that the', 'which the', 'from our', 'with our', 'in our',
         }
         
-        filtered = [
-            (phrase, count) for phrase, count in counts.most_common(top_k * 3)
-            if phrase not in stopwords 
-            and len(phrase) > 2
-            and not phrase.endswith(' the')
-            and not phrase.startswith('the ')
-            and not phrase.endswith(' our')
-            and not phrase.startswith('our ')
-            and not phrase.endswith(' out')
-            and not phrase.startswith('out ')
-        ]
+        # Filter and Weight
+        filtered = []
+        for word, count in counts.most_common(top_k * 10): # Scan deep
+            if word in stopwords: continue
+            
+            # Heuristic for "Hidden Links":
+            # We want words that are descriptive but not generic.
+            # We prioritize length slightly as a proxy for complexity.
+            weight = count * (len(word) ** 0.5) 
+            filtered.append((word, weight))
         
-        return [phrase for phrase, _ in filtered[:top_k]]
+        # Sort by calculated weight
+        filtered.sort(key=lambda x: x[1], reverse=True)
+        
+        return [word for word, _ in filtered[:top_k]]
     
     # ---- Main Pipeline ----
+    def run_directional(
+        self,
+        filters: List[str],
+        k_neighbors: int = 15,
+        min_cluster_size: int = 5,
+        resolution: float = 1.0,
+        top_concepts_per_cluster: int = 30,
+        debug: bool = False,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+    ) -> Dict[str, List[str]]:
+        """
+        Run the mining pipeline but force the results into specific Filters.
+        """
+        if len(self.corpus) == 0:
+            return {}
+
+        # 1. Standard Embedding & Graph building (Reusing logic to get concepts)
+        if progress_callback: progress_callback("Embedding corpus", 0.1)
+        ids, embeddings, types = self._embed_corpus()
+        
+        if len(ids) == 0: return {}
+
+        if progress_callback: progress_callback("Analyzing structure", 0.3)
+        G = self._build_similarity_graph(ids, embeddings, k=k_neighbors)
+        
+        if progress_callback: progress_callback("Extracting themes", 0.5)
+        # We still cluster to ensure we get a diverse range of concepts from the whole graph
+        clusters = self._cluster_graph(G, min_size=min_cluster_size, resolution=resolution)
+        
+        # 2. Aggregating Concepts
+        # Instead of treating clusters separately, we gather a "Soup" of concepts
+        all_concepts_soup = []
+        for cid, members in clusters.items():
+            # Get top concepts for this cluster
+            c_concepts = self._extract_cluster_concepts(members, top_k=top_concepts_per_cluster)
+            all_concepts_soup.extend(c_concepts)
+        
+        # If clustering failed to produce enough, just grab raw concepts from random samples
+        if len(all_concepts_soup) < 20:
+             all_concepts_soup = self._extract_cluster_concepts([c.id for c in self.corpus.text_chunks], top_k=200)
+
+        # 3. Directional LLM Call
+        if progress_callback: progress_callback(f"Mapping to {len(filters)} Filters", 0.7)
+        
+        if self.llm_refiner:
+            archetypes = self.llm_refiner.refine_directional(
+                all_concepts=all_concepts_soup,
+                filters=filters
+            )
+            return archetypes, G, clusters, ids # Return G/Clusters for visualization
+        else:
+            # Fallback if no LLM
+            return {f: ["llm", "required", "for", "mode"] for f in filters}, G, clusters, ids
     
     def run(
         self,

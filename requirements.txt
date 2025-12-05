@@ -11,3 +11,7 @@ pymupdf
 httpx
 pydantic
 python-multipart
+ftfy
+regex
+faiss-cpu
+git+https://github.com/openai/CLIP.git

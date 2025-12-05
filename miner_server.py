@@ -489,6 +489,7 @@ async def handle_scan_images(data: Dict):
             from enhanced_miner import VisionDescriber
             describer = VisionDescriber()
             
+            success_count = 0
             for i, img in enumerate(state.images[-len(new_images):]):
                 if i % 5 == 0:
                     await state.broadcast({
@@ -498,13 +499,21 @@ async def handle_scan_images(data: Dict):
                 
                 try:
                     desc = describer.describe_image(img.path)
-                    img.description = desc
+                    if desc:
+                        img.description = desc
+                        success_count += 1
                 except Exception as e:
-                    pass
+                    print(f"[Vision] Error describing {img.name}: {e}")
                 
                 await asyncio.sleep(0.01)  # Allow UI updates
+            
+            await state.broadcast({
+                "type": "scan_progress",
+                "message": f"Described {success_count}/{len(new_images)} images"
+            })
                 
-        except ImportError:
+        except ImportError as e:
+            print(f"[Vision] Import error: {e}")
             await state.broadcast({
                 "type": "scan_progress",
                 "message": "Vision describer not available"
@@ -954,6 +963,7 @@ async def run_mining_pipeline(job_id: str, config: Dict):
         # Add images
         if state.images:
             await update_progress("Loading images", 0.2, f"{len(state.images)} images")
+            images_with_descriptions = 0
             for img in state.images:
                 miner.corpus.images.append(type('ImageItem', (), {
                     'id': img.id,
@@ -963,6 +973,33 @@ async def run_mining_pipeline(job_id: str, config: Dict):
                     'description': img.description,
                     'meta': {}
                 })())
+                
+                # If image has a vision LLM description, add it as a text chunk for embedding
+                if img.description:
+                    miner.add_text(
+                        img.description, 
+                        source=f"image:{img.name}", 
+                        chunk=False
+                    )
+                    images_with_descriptions += 1
+                else:
+                    # Fallback: use filename (without extension) as minimal text
+                    name_without_ext = img.name.rsplit('.', 1)[0] if '.' in img.name else img.name
+                    # Convert underscores/hyphens to spaces for better embedding
+                    fallback_text = name_without_ext.replace('_', ' ').replace('-', ' ')
+                    if fallback_text.strip():
+                        miner.add_text(
+                            fallback_text,
+                            source=f"image:{img.name}",
+                            chunk=False
+                        )
+            
+            if images_with_descriptions > 0:
+                await update_progress("Loading images", 0.22, 
+                    f"{len(state.images)} images ({images_with_descriptions} with descriptions)")
+            else:
+                await update_progress("Loading images", 0.22,
+                    f"{len(state.images)} images (using filenames - enable Vision LLM for better results)")
         
         # Embedding
         await update_progress("Embedding", 0.25, "Computing embeddings...")
@@ -985,62 +1022,100 @@ async def run_mining_pipeline(job_id: str, config: Dict):
         
         await update_progress("Graph built", 0.65, f"{G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
         
-        # Clustering
-        await update_progress("Clustering", 0.7, f"resolution={config.get('resolution', 1.0)}")
+        # Get mode and filters
+        mode = config.get("mode", "exploratory")  # "exploratory" or "directional"
+        filters = config.get("filters", [])  # e.g. ["North", "South", "East", "West"]
         
-        clusters = await loop.run_in_executor(
-            None,
-            lambda: miner._cluster_graph(
-                G, 
-                min_size=config.get("min_cluster_size", 3),
-                resolution=config.get("resolution", 1.0)
-            )
-        )
+        archetypes = {}
+        cluster_to_archetype_name = {}
         
-        await update_progress("Clusters found", 0.75, f"{len(clusters)} clusters")
-        
-        if not clusters:
-            raise ValueError("No clusters found. Try lowering min_cluster_size.")
-        
-        # Extract concepts
-        await update_progress("Extracting concepts", 0.8)
-        
-        cluster_concepts = {}
-        for i, (cid, members) in enumerate(clusters.items()):
-            concepts = miner._extract_cluster_concepts(members, top_k=30)
-            cluster_concepts[cid] = concepts if concepts else [f"cluster_{cid}"]
-            if i % 3 == 0:
-                await update_progress("Extracting concepts", 0.8 + 0.05 * (i / len(clusters)), 
-                                     f"Cluster {i+1}/{len(clusters)}")
-        
-        # LLM refinement (two passes: per-cluster + refinement)
-        # We need to track which archetype corresponds to which cluster
-        cluster_to_archetype_name = {}  # cluster_id -> archetype_name
-        
-        if config.get("use_llm", True) and llm_refiner:
-            await update_progress("LLM Pass 1", 0.85, f"Generating {len(cluster_concepts)} archetypes...")
+        # =========================================================
+        # BRANCH 1: DIRECTIONAL / FILTER MODE
+        # =========================================================
+        if mode == "directional" and filters:
+            await update_progress("Directional Mining", 0.7, f"Applying filters: {', '.join(filters)}")
             
-            semantic_spread = config.get("semantic_spread", 0.5)
-            archetypes = await loop.run_in_executor(
+            # 1. Cluster (Common Step)
+            clusters = await loop.run_in_executor(
                 None,
-                lambda: llm_refiner.refine_clusters(cluster_concepts, semantic_spread=semantic_spread)
+                lambda: miner._cluster_graph(
+                    G, 
+                    min_size=config.get("min_cluster_size", 3),
+                    resolution=config.get("resolution", 1.0)
+                )
             )
             
-            await update_progress("LLM complete", 0.98, f"{len(archetypes)} archetypes refined")
+            # 2. Extract Concept Soup
+            await update_progress("Extracting Concept Soup", 0.75)
+            all_concepts = []
+            for cid, members in clusters.items():
+                c_concepts = miner._extract_cluster_concepts(members, top_k=30)
+                all_concepts.extend(c_concepts)
             
-            # Map cluster IDs to archetype names (in order)
-            archetype_names = list(archetypes.keys())
-            for i, cid in enumerate(clusters.keys()):
-                if i < len(archetype_names):
-                    cluster_to_archetype_name[cid] = archetype_names[i]
-                else:
-                    cluster_to_archetype_name[cid] = f"CLUSTER_{cid}"
+            # 3. LLM Mapping
+            if config.get("use_llm", True) and llm_refiner:
+                await update_progress("LLM Mapping", 0.85, f"Synthesizing into {len(filters)} filters...")
+                archetypes = await loop.run_in_executor(
+                    None,
+                    lambda: llm_refiner.refine_directional(all_concepts, filters)
+                )
+            else:
+                raise ValueError("LLM required for Directional Mode")
+                
+            # For visualization, we map specific clusters to filters based on overlap
+            # (This is an approximation for the UI graph coloring)
+            for cid in clusters.keys():
+                # Assign round-robin or random for viz purposes since 
+                # directional archetypes don't map 1:1 to structural clusters
+                import random
+                cluster_to_archetype_name[cid] = random.choice(list(archetypes.keys()))
+
+        # =========================================================
+        # BRANCH 2: STANDARD EXPLORATORY MODE (Existing Logic)
+        # =========================================================
         else:
-            archetypes = {}
-            for cid, concepts in cluster_concepts.items():
-                name = f"{concepts[0]} / {concepts[1]}".upper() if len(concepts) >= 2 else concepts[0].upper()
-                archetypes[name] = concepts[:15]
-                cluster_to_archetype_name[cid] = name
+            # Clustering
+            await update_progress("Clustering", 0.7, f"resolution={config.get('resolution', 1.0)}")
+            clusters = await loop.run_in_executor(
+                None,
+                lambda: miner._cluster_graph(
+                    G, 
+                    min_size=config.get("min_cluster_size", 3),
+                    resolution=config.get("resolution", 1.0)
+                )
+            )
+            
+            if not clusters: raise ValueError("No clusters found.")
+
+            # Extract concepts
+            await update_progress("Extracting concepts", 0.8)
+            cluster_concepts = {}
+            for i, (cid, members) in enumerate(clusters.items()):
+                concepts = miner._extract_cluster_concepts(members, top_k=30)
+                cluster_concepts[cid] = concepts if concepts else [f"cluster_{cid}"]
+
+            # LLM refinement
+            if config.get("use_llm", True) and llm_refiner:
+                await update_progress("LLM Pass", 0.85, f"Refining {len(cluster_concepts)} archetypes...")
+                semantic_spread = config.get("semantic_spread", 0.5)
+                archetypes = await loop.run_in_executor(
+                    None,
+                    lambda: llm_refiner.refine_clusters(cluster_concepts, semantic_spread=semantic_spread)
+                )
+                
+                # Map names
+                archetype_names = list(archetypes.keys())
+                for i, cid in enumerate(clusters.keys()):
+                    if i < len(archetype_names):
+                        cluster_to_archetype_name[cid] = archetype_names[i]
+                    else:
+                        cluster_to_archetype_name[cid] = f"CLUSTER_{cid}"
+            else:
+                archetypes = {}
+                for cid, concepts in cluster_concepts.items():
+                    name = concepts[0].upper()
+                    archetypes[name] = concepts[:15]
+                    cluster_to_archetype_name[cid] = name
         
         # Build graph data for visualization
         # Create a simplified graph structure with cluster assignments
@@ -1077,6 +1152,7 @@ async def run_mining_pipeline(job_id: str, config: Dict):
         job.progress = 1.0
         job.result = {
             "archetypes": archetypes,
+            "mode": mode,  # Return mode so UI knows
             "stats": {
                 "total_items": len(ids),
                 "clusters": len(clusters),
@@ -1205,29 +1281,70 @@ async def upload_pdf(file: UploadFile = File(...), chunking: str = Form("{}")):
 
 
 @app.post("/upload/image")
-async def upload_image(file: UploadFile = File(...), describe: bool = False):
+async def upload_image(request: Request, file: UploadFile = File(...), describe: str = "false"):
     """Upload and process a single image file."""
     import tempfile
     import base64
+    
+    # Debug: log raw form data
+    form = await request.form()
+    print(f"[Upload] RAW FORM KEYS: {list(form.keys())}", flush=True)
+    
+    # FormData sends booleans as strings, so we need to parse
+    describe_val = form.get('describe', 'false')
+    describe_method = form.get('describe_method', 'semantic')
+    should_describe = str(describe_val).lower() in ("true", "1", "yes")
+    print(f"[Upload] file={file.filename}, describe={should_describe}, method={describe_method}", flush=True)
     
     try:
         content = await file.read()
         
         # Save temporarily if we need to describe
         description = None
-        if describe:
+        if should_describe:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            
             try:
-                from enhanced_miner import VisionDescriber
+                if describe_method == "vision":
+                    # Use Vision LLM (slow but detailed)
+                    from enhanced_miner import VisionDescriber
+                    print(f"[Upload] Using Vision LLM for {file.filename}...", flush=True)
+                    describer = VisionDescriber()
+                    description = describer.describe_image(tmp_path)
+                else:
+                    # Use Semantic matching (fast)
+                    from enhanced_miner import SemanticWordMatcher
+                    print(f"[Upload] Using Semantic CLIP matching for {file.filename}...", flush=True)
+                    
+                    # Use cached matcher if available, recreate if it seems broken
+                    # Cache in static folder so it can be committed and deployed
+                    cache_path = Path(__file__).parent / "static" / "word_embeddings.npy"
+                    cache_path.parent.mkdir(exist_ok=True)
+                    
+                    if not hasattr(state, '_semantic_matcher') or state._semantic_matcher is None:
+                        state._semantic_matcher = SemanticWordMatcher(cache_path=str(cache_path))
+                    
+                    try:
+                        description = state._semantic_matcher.describe_image_with_llm(tmp_path)
+                    except Exception as matcher_error:
+                        print(f"[Upload] Matcher error, recreating: {matcher_error}", flush=True)
+                        # Recreate matcher in case of stale state
+                        state._semantic_matcher = SemanticWordMatcher(cache_path=str(cache_path))
+                        description = state._semantic_matcher.describe_image_with_llm(tmp_path)
                 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
-                    tmp.write(content)
-                    tmp_path = tmp.name
-                
-                describer = VisionDescriber()
-                description = describer.describe_image(tmp_path)
-                os.unlink(tmp_path)
+                print(f"[Upload] Got description: {description[:80] if description else 'None'}...", flush=True)
             except Exception as e:
+                print(f"[Upload] Description error: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 description = None
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
         
         img_item = ImageItem(
             id=f"img_{len(state.images)}",

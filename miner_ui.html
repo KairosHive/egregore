@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="static/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Egregore</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1607,8 +1608,16 @@
                         </div>
                         
                         <div class="checkbox-group">
-                            <input type="checkbox" id="describeImages">
-                            <label for="describeImages">Describe with Vision LLM</label>
+                            <input type="checkbox" id="describeImages" checked>
+                            <label for="describeImages">Describe images</label>
+                        </div>
+                        
+                        <div class="input-group" style="margin-top: 8px;">
+                            <label class="input-label">Description method</label>
+                            <select id="imageDescribeMethod" class="select-input" style="width: 100%;">
+                                <option value="semantic" selected>Semantic (CLIP + LLM) - Fast</option>
+                                <option value="vision">Vision LLM - Slow but detailed</option>
+                            </select>
                         </div>
                     </div>
                     
@@ -1650,6 +1659,19 @@
                 <div class="panel-content" style="padding: 0.75rem;">
                     <!-- Mining Config -->
                     <div class="config-compact">
+                        <div class="input-group">
+                            <label class="input-label">Mining Mode</label>
+                            <select id="miningMode" onchange="toggleFilters()">
+                                <option value="exploratory">Exploratory (Discover Archetypes)</option>
+                                <option value="directional">Directional (Apply Filters)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="input-group" id="filtersGroup" style="display: none;">
+                            <label class="input-label">Filters (comma-separated)</label>
+                            <input type="text" id="filters" placeholder="e.g. North, South, East, West" value="North, South, East, West">
+                        </div>
+                        
                         <div class="input-group">
                             <label class="input-label">Embedder Model</label>
                             <select id="embedder">
@@ -2308,13 +2330,18 @@
         }
         
         async function uploadImages(files) {
-            const describe = document.getElementById('describeImages').checked;
+            const describeCheckbox = document.getElementById('describeImages');
+            const describe = describeCheckbox ? describeCheckbox.checked : false;
+            const describeMethod = document.getElementById('imageDescribeMethod')?.value || 'semantic';
+            console.log('[uploadImages] describe:', describe, 'method:', describeMethod);
+            addLog(`Uploading ${files.length} images (Describe: ${describe ? describeMethod : 'OFF'})`, 'info');
             
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const formData = new FormData();
                 formData.append('file', file);
-                formData.append('describe', describe);
+                formData.append('describe', describe ? 'true' : 'false');
+                formData.append('describe_method', describeMethod);
                 
                 try {
                     const resp = await fetch('/upload/image', { method: 'POST', body: formData });
@@ -2357,10 +2384,23 @@
             updateDisplay();
         }
         
+        function toggleFilters() {
+            const mode = document.getElementById('miningMode').value;
+            const filtersGroup = document.getElementById('filtersGroup');
+            filtersGroup.style.display = mode === 'directional' ? 'block' : 'none';
+        }
+        
         function startMining() {
+            const mode = document.getElementById('miningMode').value;
+            const filters = mode === 'directional' ? 
+                document.getElementById('filters').value.split(',').map(f => f.trim()).filter(f => f) : 
+                [];
+                
             ws.send(JSON.stringify({
                 type: 'start_mining',
                 config: {
+                    mode: mode,
+                    filters: filters,
                     embedder: document.getElementById('embedder').value,
                     k_neighbors: parseInt(document.getElementById('kNeighbors').value),
                     min_cluster_size: parseInt(document.getElementById('minCluster').value),
