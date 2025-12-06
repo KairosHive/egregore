@@ -1687,6 +1687,17 @@ JSON only."""
 class LLMArchetypeRefiner:
     """Use LLM to refine and name discovered clusters into proper archetypes."""
     
+    # Supported output languages
+    SUPPORTED_LANGUAGES = {
+        "english": "English",
+        "french": "French",
+        "français": "French",
+        "spanish": "Spanish",
+        "español": "Spanish",
+        "german": "German",
+        "deutsch": "German",
+    }
+    
     def __init__(
         self,
         backend: Literal["cloudflare", "local"] = "cloudflare",
@@ -1694,14 +1705,27 @@ class LLMArchetypeRefiner:
         cloudflare_account_id: Optional[str] = None,
         cloudflare_api_token: Optional[str] = None,
         local_model_loader: Optional[Callable] = None,
+        output_language: str = "english",
+        temperature: float = 0.7,
     ):
         self.backend = backend
         self.model = model
         self.cf_account = cloudflare_account_id
         self.cf_token = cloudflare_api_token
         self.local_loader = local_model_loader
+        self.output_language = output_language.lower()
+        self.temperature = temperature
     
-    def _call_cloudflare(self, messages: List[Dict], max_tokens: int = 2048) -> str:
+    def _get_language_instruction(self) -> str:
+        """Get the language instruction to append to prompts."""
+        lang = self.SUPPORTED_LANGUAGES.get(self.output_language, "English")
+        if lang == "English":
+            return ""  # No instruction needed for English
+        return f"""\n\nOUTPUT LANGUAGE: Generate ALL archetype names and descriptors in {lang}.
+Use evocative, poetic {lang} vocabulary. Do NOT use English words. Rely on the richness of the {lang} language.
+The JSON keys ("name", "descriptors", "essence", "archetypes") must remain in English, but all VALUES must be in {lang}."""
+    
+    def _call_cloudflare(self, messages: List[Dict], max_tokens: int = 2048, temperature: Optional[float] = None) -> str:
         """Call Cloudflare Workers AI."""
         import requests
         
@@ -1718,10 +1742,11 @@ class LLMArchetypeRefiner:
             )
         
         url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{self.model}"
+        temp = temperature if temperature is not None else self.temperature
         
         response = requests.post(
             url,
-            json={"messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
+            json={"messages": messages, "max_tokens": max_tokens, "temperature": temp},
             headers={"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"},
             timeout=120
         )
@@ -1733,7 +1758,7 @@ class LLMArchetypeRefiner:
         
         return data.get("result", {}).get("response", "").strip()
     
-    def _call_local(self, messages: List[Dict], max_tokens: int = 2048) -> str:
+    def _call_local(self, messages: List[Dict], max_tokens: int = 2048, temperature: Optional[float] = None) -> str:
         """Call local model (requires loader function)."""
         if self.local_loader is None:
             raise ValueError("Local model loader not provided")
@@ -1742,10 +1767,11 @@ class LLMArchetypeRefiner:
         # Simplified generation (assumes compatible interface)
         prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = tok(prompt, return_tensors="pt").to(mdl.device)
+        temp = temperature if temperature is not None else self.temperature
         
         import torch
         with torch.no_grad():
-            out = mdl.generate(**inputs, max_new_tokens=max_tokens, temperature=0.7, do_sample=True)
+            out = mdl.generate(**inputs, max_new_tokens=max_tokens, temperature=temp, do_sample=True)
         
         return tok.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
     def refine_directional(
@@ -1763,6 +1789,8 @@ class LLMArchetypeRefiner:
 
         filters_text = ", ".join(filters)
 
+        lang_instruction = self._get_language_instruction()
+        
         prompt = f"""Synthesize Abstract Archetypes.
 
     FILTERS (The Containers):
@@ -1776,7 +1804,7 @@ class LLMArchetypeRefiner:
     - NAME: Abstract, 1-2 words. NO "THE".
     - DESCRIPTORS: 8-13 single words PER ARCHETYPE. Each descriptor must be a rare or evocative word.
     - NO word may appear in more than one archetype (all descriptors must be unique across archetypes).
-
+{lang_instruction}
     Output JSON only."""
 
         messages = [
@@ -1922,8 +1950,8 @@ RULES:
 3. NO proper nouns (names, places, religions, cultures)
 4. Name should be 1-2 words only
 5. TRANSFORM basic concepts into unusual/specific vocabulary - never copy them directly
-6. SINGLE-WORD descriptors only. Maximum 2 two-word phrases per archetype. 
-
+6. SINGLE-WORD descriptors only. Maximum 2 two-word phrases per archetype.
+{self._get_language_instruction()}
 Output JSON only:
 {{
   "name": "ARCHETYPE NAME",
@@ -2069,7 +2097,7 @@ RULES:
 - NO proper nouns
 - Each descriptor in exactly ONE archetype
 - 8-12 descriptors per archetype
-
+{self._get_language_instruction()}
 Output valid JSON:
 {{
   "archetypes": [

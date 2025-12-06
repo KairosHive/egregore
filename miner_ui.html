@@ -262,6 +262,71 @@
             border: 1px solid var(--border);
         }
         
+        .header-controls {
+            position: absolute;
+            right: 120px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .header-control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        
+        .header-control-group label {
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        
+        .header-control-group select,
+        .header-control-group input[type="number"] {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.65rem;
+            padding: 0.25rem 0.4rem;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+        
+        .header-control-group select:hover,
+        .header-control-group input[type="number"]:hover {
+            border-color: var(--border-hover);
+        }
+        
+        .header-control-group select:focus,
+        .header-control-group input[type="number"]:focus {
+            border-color: var(--accent-primary);
+        }
+        
+        .header-control-group select {
+            min-width: 70px;
+        }
+        
+        .header-control-group input[type="number"] {
+            width: 50px;
+            text-align: center;
+        }
+        
+        /* Hide number input spinners */
+        .header-control-group input[type="number"]::-webkit-outer-spin-button,
+        .header-control-group input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .header-control-group input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+        
         .status-dot {
             width: 5px;
             height: 5px;
@@ -2245,6 +2310,17 @@
                 </div>
             </div>
             <div class="subtitle">Archetype Builder</div>
+            <div class="header-controls">
+                <div class="header-control-group">
+                    <label for="outputLanguage">Lang</label>
+                    <select id="outputLanguage">
+                        <option value="english">EN</option>
+                        <option value="french">FR</option>
+                        <option value="spanish">ES</option>
+                        <option value="german">DE</option>
+                    </select>
+                </div>
+            </div>
             <div class="connection-badge">
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Disconnected</span>
@@ -2605,11 +2681,20 @@
                         
                         <div class="input-group">
                             <label class="input-label">LLM Model</label>
-                            <select id="llmModel">
-                                <option value="@cf/meta/llama-3.1-8b-instruct">Llama 3.1 8B (default)</option>
-                                <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B (quality)</option>
-                                <option value="@hf/google/gemma-7b-it">Google Gemma 7B</option>
-                            </select>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <select id="llmModel" style="flex: 1;">
+                                    <option value="@cf/meta/llama-3.1-8b-instruct">Llama 3.1 8B (default)</option>
+                                    <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B (quality)</option>
+                                    <option value="@hf/google/gemma-7b-it">Google Gemma 7B</option>
+                                </select>
+                                <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                    <label style="font-size: 0.6rem; color: var(--text-muted);">T°</label>
+                                    <input type="number" id="llmTemperature" value="0.7" min="0" max="1.5" step="0.1" 
+                                           style="width: 45px; padding: 0.35rem; font-size: 0.7rem; text-align: center;
+                                                  background: var(--bg-primary); border: 1px solid var(--border); 
+                                                  border-radius: 4px; color: var(--text-primary);">
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="input-group">
@@ -3363,11 +3448,15 @@
             document.getElementById(`tab-${tabName}`).classList.add('active');
         }
         
+        let reconnectAttempts = 0;
+        const maxReconnectDelay = 30000; // Max 30 seconds between reconnects
+        
         function connect() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
             
             ws.onopen = () => {
+                reconnectAttempts = 0; // Reset on successful connection
                 // Send session ID as first message
                 ws.send(JSON.stringify({ type: 'init', session_id: sessionId }));
                 document.getElementById('statusDot').classList.add('connected');
@@ -3375,16 +3464,26 @@
                 addLog('Connected to server', 'success');
             };
             
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 document.getElementById('statusDot').classList.remove('connected');
                 document.getElementById('statusText').textContent = 'Disconnected';
-                setTimeout(connect, 2000);
+                
+                // Exponential backoff for reconnection
+                reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), maxReconnectDelay);
+                console.log(`[WS] Connection closed (code: ${event.code}). Reconnecting in ${Math.round(delay/1000)}s...`);
+                setTimeout(connect, delay);
             };
             
             ws.onerror = (err) => console.error('WebSocket error:', err);
             ws.onmessage = (e) => {
                 try {
                     const msg = JSON.parse(e.data);
+                    // Handle server ping silently
+                    if (msg.type === 'ping') {
+                        ws.send(JSON.stringify({ type: 'pong' }));
+                        return;
+                    }
                     console.log('[WS] Received message type:', msg.type);
                     handleMessage(msg);
                 } catch(err) {
@@ -3773,6 +3872,10 @@
             const filters = mode === 'directional' ? 
                 document.getElementById('filters').value.split(',').map(f => f.trim()).filter(f => f) : 
                 [];
+            
+            // Get header controls
+            const outputLanguage = document.getElementById('outputLanguage').value;
+            const llmTemperature = parseFloat(document.getElementById('llmTemperature').value) || 0.7;
                 
             ws.send(JSON.stringify({
                 type: 'start_mining',
@@ -3785,7 +3888,9 @@
                     resolution: parseFloat(document.getElementById('resolution').value),
                     use_llm: document.getElementById('useLLM').checked,
                     llm_model: document.getElementById('llmModel').value,
-                    semantic_spread: parseFloat(document.querySelector('input[name="semanticSpread"]:checked').value)
+                    semantic_spread: parseFloat(document.querySelector('input[name="semanticSpread"]:checked').value),
+                    output_language: outputLanguage,
+                    temperature: llmTemperature
                 }
             }));
         }
@@ -4864,9 +4969,11 @@
             chipsContainer.innerHTML = archetypeNames.map((name, idx) => {
                 const isSelected = selectedArchetypesForVision.includes(name);
                 const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+                // Escape quotes and apostrophes for safe use in onclick handler
+                const escapedName = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 return `<div class="archetype-chip ${isSelected ? 'selected' : ''}" 
                              style="${isSelected ? '' : `border-color: ${color}40; color: ${color};`}"
-                             onclick="toggleArchetypeForVision('${name}')">${name}</div>`;
+                             onclick="toggleArchetypeForVision('${escapedName}')">${name}</div>`;
             }).join('');
             
             updateSelectedCount();

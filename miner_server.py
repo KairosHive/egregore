@@ -270,41 +270,84 @@ async def startup_event():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
-    # Wait for the first message which should contain the session ID
-    try:
-        init_data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
-    except asyncio.TimeoutError:
-        await websocket.close(code=4000, reason="Session ID not received")
-        return
-    
-    # Get or create session
-    session_id = init_data.get("session_id")
-    if not session_id:
-        # Generate a new session ID if client didn't provide one
-        session_id = str(uuid.uuid4())
-    
-    session = session_manager.get_or_create(session_id)
-    session.websockets.append(websocket)
-    
-    print(f"[WebSocket] Client connected to session {session_id[:8]}... (active sessions: {session_manager.active_count})")
-    
-    # Send current state on connect
-    await websocket.send_json({
-        "type": "init",
-        "session_id": session_id,
-        "corpus": session.corpus_summary,
-        "jobs": {jid: asdict(job) for jid, job in session.jobs.items()},
-        "current_job": session.current_job
-    })
+    session_id = None
+    session = None
+    ping_task = None
     
     try:
+        # Wait for the first message which should contain the session ID
+        try:
+            init_data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
+        except asyncio.TimeoutError:
+            await websocket.close(code=4000, reason="Session ID not received")
+            return
+        except WebSocketDisconnect:
+            # Client disconnected before sending init - this is normal on page refresh
+            return
+        except Exception as e:
+            print(f"[WebSocket] Error receiving init: {e}")
+            return
+        
+        # Get or create session
+        session_id = init_data.get("session_id")
+        if not session_id:
+            # Generate a new session ID if client didn't provide one
+            session_id = str(uuid.uuid4())
+        
+        session = session_manager.get_or_create(session_id)
+        session.websockets.append(websocket)
+        
+        print(f"[WebSocket] Client connected to session {session_id[:8]}... (active sessions: {session_manager.active_count})")
+        
+        # Send current state on connect
+        await websocket.send_json({
+            "type": "init",
+            "session_id": session_id,
+            "corpus": session.corpus_summary,
+            "jobs": {jid: asdict(job) for jid, job in session.jobs.items()},
+            "current_job": session.current_job
+        })
+        
+        # Start server-side ping task to keep connection alive
+        async def ping_loop():
+            try:
+                while True:
+                    await asyncio.sleep(25)  # Ping every 25 seconds (Railway timeout is ~30s)
+                    try:
+                        await websocket.send_json({"type": "ping"})
+                    except Exception:
+                        break
+            except asyncio.CancelledError:
+                pass
+        
+        ping_task = asyncio.create_task(ping_loop())
+        
+        # Main message loop
         while True:
-            data = await websocket.receive_json()
-            await handle_ws_message(websocket, session, data)
-    except WebSocketDisconnect:
-        if websocket in session.websockets:
+            try:
+                data = await websocket.receive_json()
+                await handle_ws_message(websocket, session, data)
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                print(f"[WebSocket] Error in message loop: {e}")
+                break
+                
+    except Exception as e:
+        print(f"[WebSocket] Unexpected error: {e}")
+        traceback.print_exc()
+    finally:
+        # Cleanup
+        if ping_task:
+            ping_task.cancel()
+            try:
+                await ping_task
+            except asyncio.CancelledError:
+                pass
+        
+        if session and websocket in session.websockets:
             session.websockets.remove(websocket)
-        print(f"[WebSocket] Client disconnected from session {session_id[:8]}... (remaining: {len(session.websockets)})")
+            print(f"[WebSocket] Client disconnected from session {session_id[:8] if session_id else 'unknown'}... (remaining: {len(session.websockets)})")
 
 
 async def handle_ws_message(ws: WebSocket, session: MinerState, data: Dict):
@@ -1138,7 +1181,9 @@ async def run_mining_pipeline(session: MinerState, job_id: str, config: Dict):
         if config.get("use_llm", True):
             llm_refiner = LLMArchetypeRefiner(
                 backend="cloudflare",
-                model=config.get("llm_model", "@cf/meta/llama-3.1-8b-instruct")
+                model=config.get("llm_model", "@cf/meta/llama-3.1-8b-instruct"),
+                output_language=config.get("output_language", "english"),
+                temperature=config.get("temperature", 0.7)
             )
         
         # Create miner
