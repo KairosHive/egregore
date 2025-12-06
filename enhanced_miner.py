@@ -1854,9 +1854,9 @@ class LLMArchetypeRefiner:
             # FOCUSED: Simple name, coherent descriptors, grounded in source
             spread_instruction = """STYLE: GROUNDED & ACCESSIBLE
 NAME FORMAT: 1 word preferred, 2 words maximum
-- Good names: "Flame", "Shadow", "Roots", "The Vessel", "Breath"
+- Good names: "Flame", "Trickster", "Roots", "The Vessel", "Breath"
 - Bad names: "The Cartographer of Dreams", "Silken Weaver of Time" (too long)
-- Bad names: "Luminari", "Terraephyra" (invented/cryptic words)
+- Bad names: "Chronostasis", "Terraephyra" (invented/cryptic words)
 
 DESCRIPTORS: Everyday words, tightly connected to source concepts
 - All descriptors should CLEARLY relate to the theme found in source concepts
@@ -1864,11 +1864,10 @@ DESCRIPTORS: Everyday words, tightly connected to source concepts
 - Example for fire concepts: "FLAME" → warmth, burning, light, smoke, spark, heat, glow, ember, torch, blaze"""
         elif semantic_spread < 0.7:
             # BALANCED: Simple name, but semantically rich descriptors
-            spread_instruction = """STYLE: ACCESSIBLE NAME, RICH DESCRIPTORS
+            spread_instruction = """STYLE: ABSTRACTED NAME, RICH DESCRIPTORS
 NAME FORMAT: 1 word preferred, 2 words maximum  
 - Good names: "Threshold", "Marrow", "The Hollow", "Residue", "Patina"
 - Bad names: "The Keeper of Forgotten Whispers" (too long)
-- Bad names: "The Storyteller", "The Mapmaker" (generic role-names)
 - AVOID: Keeper, Walker, Weaver, Maker, Teller, Bearer
 
 DESCRIPTORS: Unusual vocabulary but ALL CONNECTED to source concepts
@@ -1881,13 +1880,12 @@ DESCRIPTORS: Unusual vocabulary but ALL CONNECTED to source concepts
             # DIVERGENT: Cryptic name, surrealist descriptors
             spread_instruction = """STYLE: SURREALIST & MYTHOPOIETIC
 NAME FORMAT: 1-2 words, etymologically rich or invented
-- Good names: "Pyrrhic", "Velamen", "Ossuary", "The Liminal"
 
 DESCRIPTORS: Transform basic concepts into SPECIFIC, UNUSUAL vocabulary.
 The source concepts are just THEMES - never use them directly as descriptors.
 Instead, find rare/technical/poetic words that EVOKE those themes obliquely.
 
-TRANSFORMATION EXAMPLES (source concept → good descriptors):
+TRANSFORMATION EXAMPLES (source concept → good descriptors). These are just examples - do NOT copy them directly:
 - "time, past, future" → chronometry, patina, palimpsest, vestige, harbinger, sediment
 - "life, death, living" → pulse, carrion, germination, ossify, quickening, dormancy  
 - "earth, ground, soil" → loam, stratum, rhizome, telluric, alluvial, subterranean

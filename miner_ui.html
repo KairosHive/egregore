@@ -486,12 +486,61 @@
         .input-group { margin-bottom: 0.65rem; }
         
         .input-label {
-            display: block;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
             font-size: 0.7rem;
             color: var(--text-muted);
             margin-bottom: 0.35rem;
             font-weight: 500;
             letter-spacing: 0.02em;
+        }
+        
+        .info-btn {
+            position: relative;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+            color: var(--accent-primary);
+            font-size: 0.55rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        
+        .info-btn:hover {
+            background: rgba(139, 92, 246, 0.4);
+            border-color: var(--accent-primary);
+        }
+        
+        .info-tooltip {
+            position: fixed;
+            background: rgba(15, 10, 30, 0.98);
+            border: 1px solid rgba(139, 92, 246, 0.5);
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            width: 220px;
+            font-size: 0.6rem;
+            font-weight: 400;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.15s ease, visibility 0.15s ease;
+            z-index: 999999;
+            pointer-events: none;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+            text-align: left;
+        }
+        
+        .info-tooltip.visible {
+            opacity: 1;
+            visibility: visible;
         }
         
         .input-row {
@@ -1685,7 +1734,7 @@
         
         .vision-action-btn {
             padding: 0.35rem 0.75rem;
-            font-size: 0.6rem;
+            font-size: 0.65rem;
             background: rgba(139, 92, 246, 0.15);
             border: 1px solid rgba(139, 92, 246, 0.3);
             border-radius: 6px;
@@ -1694,9 +1743,51 @@
             transition: all 0.2s ease;
         }
         
+        .vision-action-btn.save-btn {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
+            border-color: rgba(34, 197, 94, 0.4);
+            color: #22c55e;
+        }
+        
+        .vision-action-btn.save-btn:hover {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(16, 185, 129, 0.3) 100%);
+            border-color: rgba(34, 197, 94, 0.6);
+        }
+        
         .vision-action-btn:hover {
             background: rgba(139, 92, 246, 0.25);
             border-color: rgba(139, 92, 246, 0.5);
+        }
+        
+        .gallery-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .gallery-action-btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.7rem;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            border-radius: 8px;
+            color: #22c55e;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        
+        .gallery-action-btn:hover {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(16, 185, 129, 0.3) 100%);
+            border-color: rgba(34, 197, 94, 0.6);
+            transform: translateY(-1px);
+        }
+        
+        .gallery-action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
         
         /* Model Selection */
@@ -1810,15 +1901,19 @@
         .geodesic-container {
             display: flex;
             gap: 1rem;
-            align-items: stretch;
+            align-items: flex-start;
+            justify-content: center;
         }
         
         .geodesic-matrix-wrapper {
-            flex: 1;
+            flex: 0 0 auto;
             position: relative;
             background: rgba(0, 0, 0, 0.3);
             border-radius: 8px;
             padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         
         .geodesic-labels {
@@ -1870,16 +1965,18 @@
         .geodesic-color-scale {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
+            gap: 0.4rem;
+            margin-top: 0.4rem;
             font-size: 0.5rem;
             color: var(--text-muted);
+            width: 100%;
+            max-width: 200px;
         }
         
         .geodesic-scale-bar {
             flex: 1;
-            height: 8px;
-            border-radius: 4px;
+            height: 6px;
+            border-radius: 3px;
             background: linear-gradient(90deg, #14b8a6, #3b82f6, #8b5cf6, #1e1b4b);
         }
 
@@ -2215,11 +2312,19 @@
                         <div id="textParams-paragraph" class="chunk-params">
                             <div class="config-grid">
                                 <div class="input-group">
-                                    <label class="input-label">Min length</label>
+                                    <label class="input-label">Min length
+                                        <span class="info-btn">?
+                                            <span class="info-tooltip">Minimum number of <strong>characters</strong> for a chunk. Paragraphs shorter than this will be merged with the next one.</span>
+                                        </span>
+                                    </label>
                                     <input type="number" id="textParaMinLen" value="50" min="10" max="500" oninput="previewChunks()">
                                 </div>
                                 <div class="input-group">
-                                    <label class="input-label">Max length</label>
+                                    <label class="input-label">Max length
+                                        <span class="info-btn">?
+                                            <span class="info-tooltip">Maximum number of <strong>characters</strong> per chunk. Longer paragraphs will start a new chunk.</span>
+                                        </span>
+                                    </label>
                                     <input type="number" id="textParaMaxLen" value="1000" min="100" max="5000" oninput="previewChunks()">
                                 </div>
                             </div>
@@ -2300,11 +2405,19 @@
                         <div id="pdfParams-paragraph" class="chunk-params">
                             <div class="config-grid">
                                 <div class="input-group">
-                                    <label class="input-label">Min length</label>
+                                    <label class="input-label">Min length
+                                        <span class="info-btn">?
+                                            <span class="info-tooltip">Minimum number of <strong>characters</strong> for a chunk. Paragraphs shorter than this will be merged with the next one.</span>
+                                        </span>
+                                    </label>
                                     <input type="number" id="pdfParaMinLen" value="50" min="10" max="500">
                                 </div>
                                 <div class="input-group">
-                                    <label class="input-label">Max length</label>
+                                    <label class="input-label">Max length
+                                        <span class="info-btn">?
+                                            <span class="info-tooltip">Maximum number of <strong>characters</strong> per chunk. Longer paragraphs will start a new chunk.</span>
+                                        </span>
+                                    </label>
                                     <input type="number" id="pdfParaMaxLen" value="1000" min="100" max="5000">
                                 </div>
                             </div>
@@ -2458,18 +2571,30 @@
                         
                         <div class="config-grid">
                             <div class="input-group">
-                                <label class="input-label">K Neighbors</label>
+                                <label class="input-label">K Neighbors
+                                    <span class="info-btn">?
+                                        <span class="info-tooltip">Number of nearest neighbors for UMAP graph construction. Higher = more global structure preserved. Lower = finer local detail. Try 10-30.</span>
+                                    </span>
+                                </label>
                                 <input type="number" id="kNeighbors" value="15" min="3" max="50">
                             </div>
                             <div class="input-group">
-                                <label class="input-label">Min Cluster</label>
+                                <label class="input-label">Min Cluster
+                                    <span class="info-btn">?
+                                        <span class="info-tooltip">Minimum points to form a cluster. Smaller = more clusters (including tiny ones). Larger = fewer, denser clusters. Try 3-10.</span>
+                                    </span>
+                                </label>
                                 <input type="number" id="minCluster" value="3" min="2" max="20">
                             </div>
                         </div>
                         
                         <div class="config-grid">
                             <div class="input-group">
-                                <label class="input-label">Resolution</label>
+                                <label class="input-label">Resolution
+                                    <span class="info-btn">?
+                                        <span class="info-tooltip">Louvain clustering resolution. Higher = more, smaller clusters. Lower = fewer, larger clusters. 1.0 is balanced. Try 0.5-2.0.</span>
+                                    </span>
+                                </label>
                                 <input type="number" id="resolution" value="1.0" min="0.1" max="3.0" step="0.1">
                             </div>
                             <div class="checkbox-group" style="margin-top: 1.25rem;">
@@ -2491,11 +2616,11 @@
                             <label class="input-label">Semantic Spread</label>
                             <div class="radio-group">
                                 <label class="radio-option">
-                                    <input type="radio" name="semanticSpread" value="0.15">
+                                    <input type="radio" name="semanticSpread" value="0.15" checked>
                                     <span>Focused</span>
                                 </label>
                                 <label class="radio-option">
-                                    <input type="radio" name="semanticSpread" value="0.5" checked>
+                                    <input type="radio" name="semanticSpread" value="0.5">
                                     <span>Divergent</span>
                                 </label>
                             </div>
@@ -2821,7 +2946,7 @@
                                 <div class="topology-section-header">
                                     <div class="topology-section-icon">🎭</div>
                                     <div class="topology-section-title">Select Archetypes</div>
-                                    <div class="topology-section-subtitle">Choose 2-4 for interaction visualization</div>
+                                    <div class="topology-section-subtitle">Choose 2+ for interaction visualization</div>
                                 </div>
                                 <div class="archetype-chips" id="visualsArchetypeChips">
                                     <div class="empty-chip">Run builder to see archetypes</div>
@@ -2914,6 +3039,10 @@
                                     <div class="topology-section-title">Generated Visions</div>
                                     <div class="topology-section-subtitle">Archetype interactions visualized</div>
                                 </div>
+                                <div class="gallery-actions" id="galleryActions" style="display: none;">
+                                    <button class="gallery-action-btn" onclick="downloadAllVisions()">💾 Save All Images</button>
+                                    <button class="gallery-action-btn" onclick="clearAllVisions()" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #ef4444;">🗑️ Clear All</button>
+                                </div>
                                 <div class="visuals-gallery" id="visualsGallery">
                                     <div class="visuals-placeholder">
                                         <div class="visuals-placeholder-icon">🔮</div>
@@ -2937,6 +3066,15 @@
     
     <script>
         console.log('=== EGREGORE SCRIPT LOADED ===');
+        
+        // Generate unique session ID for this browser tab
+        // Use sessionStorage so each tab gets its own session
+        let sessionId = sessionStorage.getItem('egregore_session_id');
+        if (!sessionId) {
+            sessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now().toString(36);
+            sessionStorage.setItem('egregore_session_id', sessionId);
+        }
+        console.log('[Session] ID:', sessionId);
         
         let ws = null;
         let currentResults = null;
@@ -3070,7 +3208,52 @@
             
             // Update preview if on text tab
             if (prefix === 'text') previewChunks();
+            
+            // For PDFs, trigger rechunking if there are existing PDFs
+            if (prefix === 'pdf' && corpusData.pdfs.length > 0) {
+                rechunkPDFs();
+            }
         }
+        
+        // Debounce timer for rechunking
+        let rechunkTimeout = null;
+        
+        // Rechunk existing PDFs with new chunking parameters
+        function rechunkPDFs() {
+            // Debounce to avoid too many requests while user is adjusting
+            if (rechunkTimeout) clearTimeout(rechunkTimeout);
+            rechunkTimeout = setTimeout(() => {
+                const config = getChunkingConfig('pdf');
+                addLog(`Rechunking PDFs with ${config.method} method...`, 'info');
+                
+                ws.send(JSON.stringify({
+                    type: 'rechunk_pdfs',
+                    chunking: config.method,
+                    chunk_params: config
+                }));
+            }, 500);
+        }
+        
+        // Also add listeners for parameter inputs to trigger rechunking
+        function setupChunkingListeners() {
+            const pdfInputs = [
+                'pdfParaMinLen', 'pdfParaMaxLen',
+                'pdfSentPerChunk', 'pdfSentOverlap',
+                'pdfWindowSize', 'pdfStride'
+            ];
+            
+            pdfInputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('change', () => {
+                        if (corpusData.pdfs.length > 0) rechunkPDFs();
+                    });
+                }
+            });
+        }
+        
+        // Call setup after DOM is ready
+        document.addEventListener('DOMContentLoaded', setupChunkingListeners);
         
         // Get chunking config for a prefix (text or pdf)
         function getChunkingConfig(prefix) {
@@ -3185,6 +3368,8 @@
             ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
             
             ws.onopen = () => {
+                // Send session ID as first message
+                ws.send(JSON.stringify({ type: 'init', session_id: sessionId }));
                 document.getElementById('statusDot').classList.add('connected');
                 document.getElementById('statusText').textContent = 'Connected';
                 addLog('Connected to server', 'success');
@@ -3212,6 +3397,12 @@
             console.log('[handleMessage] Processing:', msg.type);
             switch (msg.type) {
                 case 'init':
+                    // Server may return a session ID (e.g., if it was generated server-side)
+                    if (msg.session_id) {
+                        sessionId = msg.session_id;
+                        sessionStorage.setItem('egregore_session_id', sessionId);
+                        console.log('[Session] Updated from server:', sessionId);
+                    }
                     if (msg.corpus) updateFromServer(msg.corpus);
                     break;
                 case 'corpus_updated':
@@ -3227,6 +3418,9 @@
                     corpusData.totalChunks += msg.chunks;
                     updateDisplay();
                     addLog(`Added ${msg.pdfs.length} PDFs (${msg.chunks} chunks)`, 'success');
+                    break;
+                case 'rechunk_complete':
+                    addLog(msg.message, 'success');
                     break;
                 case 'images_scanned':
                     corpusData.images.push(...msg.images);
@@ -3442,6 +3636,9 @@
                     uploadPDF(file);
                 }
             }
+            
+            // Reset the file input so the same file can be re-selected
+            document.getElementById('pdfFileInput').value = '';
         }
         
         function handlePDFFolder(files) {
@@ -3454,6 +3651,9 @@
             for (const file of pdfFiles) {
                 uploadPDF(file);
             }
+            
+            // Reset the folder input so the same folder can be re-selected
+            document.getElementById('pdfFolderInput').value = '';
         }
         
         async function uploadPDF(file) {
@@ -3463,7 +3663,11 @@
             formData.append('chunking', JSON.stringify(chunkConfig));
             
             try {
-                const resp = await fetch('/upload/pdf', { method: 'POST', body: formData });
+                const resp = await fetch('/upload/pdf', { 
+                    method: 'POST', 
+                    body: formData,
+                    headers: { 'X-Session-Id': sessionId }
+                });
                 const data = await resp.json();
                 if (data.error) {
                     addLog(`Error uploading ${file.name}: ${data.error}`, 'error');
@@ -3481,6 +3685,9 @@
             
             const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
             uploadImages(imageFiles);
+            
+            // Reset the file input so the same files can be re-selected
+            document.getElementById('imageFileInput').value = '';
         }
         
         function handleImageFolder(files) {
@@ -3491,6 +3698,9 @@
             
             addLog(`Found ${imageFiles.length} images in folder (using ${limited.length})`, 'info');
             uploadImages(limited);
+            
+            // Reset the folder input so the same folder can be re-selected
+            document.getElementById('imageFolderInput').value = '';
         }
         
         async function uploadImages(files) {
@@ -3508,7 +3718,11 @@
                 formData.append('describe_method', describeMethod);
                 
                 try {
-                    const resp = await fetch('/upload/image', { method: 'POST', body: formData });
+                    const resp = await fetch('/upload/image', { 
+                        method: 'POST', 
+                        body: formData,
+                        headers: { 'X-Session-Id': sessionId }
+                    });
                     const data = await resp.json();
                     if (i % 10 === 0 || i === files.length - 1) {
                         addLog(`Uploaded ${i + 1}/${files.length} images`, 'info');
@@ -4228,11 +4442,21 @@
                 ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Label
-                ctx.fillStyle = '#ffffff';
+                // Label - full name with background for readability
+                const label = name;
                 ctx.font = '10px sans-serif';
+                const textWidth = ctx.measureText(label).width;
+                
+                // Draw background pill
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.beginPath();
+                ctx.roundRect(pos.x - textWidth/2 - 4, pos.y - 22, textWidth + 8, 14, 3);
+                ctx.fill();
+                
+                // Draw text
+                ctx.fillStyle = '#ffffff';
                 ctx.textAlign = 'center';
-                ctx.fillText(name.slice(0, 12), pos.x, pos.y - 12);
+                ctx.fillText(label, pos.x, pos.y - 12);
             });
         }
         
@@ -4426,16 +4650,26 @@
                 ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Label
-                ctx.fillStyle = '#fff';
+                // Label with background for readability
+                const label = name;
                 ctx.font = 'bold 10px sans-serif';
+                const textWidth = ctx.measureText(label).width;
+                
+                // Draw background pill
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.beginPath();
+                ctx.roundRect(pos.x - textWidth/2 - 4, pos.y + radius + 6, textWidth + 8, 14, 3);
+                ctx.fill();
+                
+                // Draw text
+                ctx.fillStyle = '#fff';
                 ctx.textAlign = 'center';
-                ctx.fillText(name.slice(0, 12), pos.x, pos.y + radius + 14);
+                ctx.fillText(label, pos.x, pos.y + radius + 16);
                 
                 // Mass indicator
                 ctx.fillStyle = 'rgba(255,255,255,0.5)';
                 ctx.font = '8px sans-serif';
-                ctx.fillText(`n=${c.mass}`, pos.x, pos.y + radius + 24);
+                ctx.fillText(`n=${c.mass}`, pos.x, pos.y + radius + 28);
             });
         }
         
@@ -4642,7 +4876,7 @@
             const idx = selectedArchetypesForVision.indexOf(name);
             if (idx >= 0) {
                 selectedArchetypesForVision.splice(idx, 1);
-            } else if (selectedArchetypesForVision.length < 4) {
+            } else {
                 selectedArchetypesForVision.push(name);
             }
             updateVisualsArchetypeChips();
@@ -4726,7 +4960,8 @@ The overall composition should feel like a page from an alien encyclopedia docum
                 const response = await fetch('/api/generate-vision', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-Session-Id': sessionId
                     },
                     body: JSON.stringify({
                         apiKey: geminiApiKey,
@@ -4781,8 +5016,15 @@ The overall composition should feel like a page from an alien encyclopedia docum
                         <p>Select archetypes and generate to see their visual manifestation</p>
                     </div>
                 `;
+                // Hide gallery actions when empty
+                const actionsEl = document.getElementById('galleryActions');
+                if (actionsEl) actionsEl.style.display = 'none';
                 return;
             }
+            
+            // Show gallery actions when there are visions
+            const actionsEl = document.getElementById('galleryActions');
+            if (actionsEl) actionsEl.style.display = 'flex';
             
             gallery.innerHTML = generatedVisions.map((vision, idx) => `
                 <div class="vision-card">
@@ -4799,7 +5041,7 @@ The overall composition should feel like a page from an alien encyclopedia docum
                         <img class="vision-image" src="${vision.imageData}" alt="Archetype vision" />
                     </div>
                     <div class="vision-actions">
-                        <button class="vision-action-btn" onclick="downloadVision(${idx})">💾 Save</button>
+                        <button class="vision-action-btn save-btn" onclick="downloadVision(${idx})">💾 Save Image</button>
                         <button class="vision-action-btn" onclick="toggleVisionPrompt(${idx})">📝 Prompt</button>
                         <button class="vision-action-btn" onclick="removeVision(${idx})">🗑️ Remove</button>
                     </div>
@@ -4830,6 +5072,36 @@ The overall composition should feel like a page from an alien encyclopedia docum
         function removeVision(idx) {
             generatedVisions.splice(idx, 1);
             renderVisualsGallery();
+        }
+        
+        async function downloadAllVisions() {
+            if (generatedVisions.length === 0) return;
+            
+            // Download each vision with a small delay to avoid browser blocking
+            for (let i = 0; i < generatedVisions.length; i++) {
+                const vision = generatedVisions[i];
+                const link = document.createElement('a');
+                link.href = vision.imageData;
+                link.download = `egregore_${i + 1}_${vision.archetypes.join('_')}_${vision.style}.png`;
+                link.click();
+                
+                // Small delay between downloads
+                if (i < generatedVisions.length - 1) {
+                    await new Promise(r => setTimeout(r, 300));
+                }
+            }
+            
+            addLog(`Downloaded ${generatedVisions.length} vision images`, 'success');
+        }
+        
+        function clearAllVisions() {
+            if (generatedVisions.length === 0) return;
+            
+            if (confirm(`Clear all ${generatedVisions.length} generated visions?`)) {
+                generatedVisions = [];
+                renderVisualsGallery();
+                addLog('Cleared all generated visions', 'info');
+            }
         }
 
         function updateClusterViz(result) {
@@ -5105,7 +5377,7 @@ The overall composition should feel like a page from an alien encyclopedia docum
             try {
                 const resp = await fetch('/api/export-to-delyrism', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
                     body: JSON.stringify({ archetypes: currentResults.archetypes })
                 });
                 const result = await resp.json();
@@ -5262,6 +5534,67 @@ The overall composition should feel like a page from an alien encyclopedia docum
         
         // Initialize spectral animation
         setTimeout(initSpectralCanvas, 100);
+        
+        // Info button tooltip handling - use a single tooltip appended to body
+        function initTooltips() {
+            // Create a single tooltip element appended to body to avoid stacking context issues
+            const globalTooltip = document.createElement('div');
+            globalTooltip.className = 'info-tooltip';
+            globalTooltip.style.cssText = 'position: fixed; z-index: 999999; pointer-events: none;';
+            document.body.appendChild(globalTooltip);
+            
+            const infoBtns = document.querySelectorAll('.info-btn');
+            
+            infoBtns.forEach(btn => {
+                const tooltipContent = btn.querySelector('.info-tooltip');
+                if (!tooltipContent) return;
+                
+                // Hide the original nested tooltip
+                tooltipContent.style.display = 'none';
+                
+                btn.addEventListener('mouseenter', (e) => {
+                    const rect = btn.getBoundingClientRect();
+                    
+                    // Copy content to global tooltip
+                    globalTooltip.innerHTML = tooltipContent.innerHTML;
+                    
+                    // Make visible to measure
+                    globalTooltip.style.visibility = 'visible';
+                    globalTooltip.style.opacity = '1';
+                    
+                    // Force reflow to get accurate dimensions
+                    const tooltipHeight = globalTooltip.offsetHeight;
+                    const tooltipWidth = globalTooltip.offsetWidth || 220;
+                    
+                    // Calculate position - try above first
+                    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+                    let top = rect.top - tooltipHeight - 8;
+                    
+                    // Check if it goes off screen top, flip to below
+                    if (top < 10) {
+                        top = rect.bottom + 8;
+                    }
+                    
+                    // Check if it goes off screen left/right
+                    if (left < 10) left = 10;
+                    if (left + tooltipWidth > window.innerWidth - 10) {
+                        left = window.innerWidth - tooltipWidth - 10;
+                    }
+                    
+                    // Apply final position
+                    globalTooltip.style.left = left + 'px';
+                    globalTooltip.style.top = top + 'px';
+                });
+                
+                btn.addEventListener('mouseleave', () => {
+                    globalTooltip.style.visibility = 'hidden';
+                    globalTooltip.style.opacity = '0';
+                });
+            });
+        }
+        
+        // Run tooltip init after a short delay to ensure DOM is ready
+        setTimeout(initTooltips, 200);
         
         connect();
     </script>

@@ -10,6 +10,8 @@ import asyncio
 import json
 import os
 import sys
+import uuid
+import time
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Callable
 from dataclasses import dataclass, asdict, field
@@ -84,6 +86,7 @@ class PDFItem:
     name: str
     pages: int = 0
     chunks: int = 0
+    raw_pages: List[Dict] = field(default_factory=list)  # Store raw text per page for rechunking
 
 @dataclass
 class ImageItem:
@@ -114,7 +117,12 @@ class MiningJob:
 
 
 class MinerState:
-    def __init__(self):
+    """Per-session state for a single user."""
+    
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self.created_at = time.time()
+        self.last_activity = time.time()
         self.jobs: Dict[str, MiningJob] = {}
         self.current_job: Optional[str] = None
         self.pdfs: List[PDFItem] = []
@@ -125,6 +133,10 @@ class MinerState:
         self.embedder = None
         self.image_encoder = None
         self._current_embedder = None  # Track which embedder is loaded
+    
+    def touch(self):
+        """Update last activity timestamp."""
+        self.last_activity = time.time()
         
     @property
     def corpus_summary(self):
@@ -139,7 +151,7 @@ class MinerState:
         }
         
     async def broadcast(self, message: Dict):
-        """Send message to all connected WebSocket clients."""
+        """Send message to all connected WebSocket clients for this session."""
         dead = []
         for ws in self.websockets:
             try:
@@ -167,73 +179,177 @@ class MinerState:
         self.text_chunks = []
 
 
-state = MinerState()
+class SessionManager:
+    """Manages per-user sessions to isolate state between users."""
+    
+    # Session timeout in seconds (1 hour)
+    SESSION_TIMEOUT = 3600
+    # Cleanup interval in seconds (5 minutes)
+    CLEANUP_INTERVAL = 300
+    
+    def __init__(self):
+        self.sessions: Dict[str, MinerState] = {}
+        self._cleanup_task = None
+    
+    def get_or_create(self, session_id: str) -> MinerState:
+        """Get existing session or create a new one."""
+        if session_id not in self.sessions:
+            print(f"[SessionManager] Creating new session: {session_id[:8]}...")
+            self.sessions[session_id] = MinerState(session_id)
+        else:
+            self.sessions[session_id].touch()
+        return self.sessions[session_id]
+    
+    def get(self, session_id: str) -> Optional[MinerState]:
+        """Get session if it exists."""
+        session = self.sessions.get(session_id)
+        if session:
+            session.touch()
+        return session
+    
+    def remove(self, session_id: str):
+        """Remove a session."""
+        if session_id in self.sessions:
+            print(f"[SessionManager] Removing session: {session_id[:8]}...")
+            del self.sessions[session_id]
+    
+    async def cleanup_expired(self):
+        """Remove expired sessions (no activity for SESSION_TIMEOUT)."""
+        now = time.time()
+        expired = []
+        for sid, session in self.sessions.items():
+            # Only expire if no websockets connected and timed out
+            if not session.websockets and (now - session.last_activity) > self.SESSION_TIMEOUT:
+                expired.append(sid)
+        
+        for sid in expired:
+            print(f"[SessionManager] Expiring inactive session: {sid[:8]}...")
+            del self.sessions[sid]
+        
+        if expired:
+            print(f"[SessionManager] Cleaned up {len(expired)} expired sessions. Active: {len(self.sessions)}")
+    
+    async def start_cleanup_task(self):
+        """Start background task to clean up expired sessions."""
+        async def cleanup_loop():
+            while True:
+                await asyncio.sleep(self.CLEANUP_INTERVAL)
+                await self.cleanup_expired()
+        
+        self._cleanup_task = asyncio.create_task(cleanup_loop())
+    
+    @property
+    def active_count(self) -> int:
+        """Number of active sessions."""
+        return len(self.sessions)
+
+
+# Global session manager (not per-user state)
+session_manager = SessionManager()
+
+# For backwards compatibility during transition - will be removed
+# This is now a function that raises an error if used directly
+class _DeprecatedState:
+    def __getattr__(self, name):
+        raise RuntimeError("Global 'state' is deprecated. Use session_manager.get_or_create(session_id) instead.")
+
+state = _DeprecatedState()
 
 # ============================================================
 # WebSocket Handler
 # ============================================================
 
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on server startup."""
+    await session_manager.start_cleanup_task()
+    print(f"[Server] Session cleanup task started (timeout: {SessionManager.SESSION_TIMEOUT}s)")
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    state.websockets.append(websocket)
+    
+    # Wait for the first message which should contain the session ID
+    try:
+        init_data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=4000, reason="Session ID not received")
+        return
+    
+    # Get or create session
+    session_id = init_data.get("session_id")
+    if not session_id:
+        # Generate a new session ID if client didn't provide one
+        session_id = str(uuid.uuid4())
+    
+    session = session_manager.get_or_create(session_id)
+    session.websockets.append(websocket)
+    
+    print(f"[WebSocket] Client connected to session {session_id[:8]}... (active sessions: {session_manager.active_count})")
     
     # Send current state on connect
     await websocket.send_json({
         "type": "init",
-        "corpus": state.corpus_summary,
-        "jobs": {jid: asdict(job) for jid, job in state.jobs.items()},
-        "current_job": state.current_job
+        "session_id": session_id,
+        "corpus": session.corpus_summary,
+        "jobs": {jid: asdict(job) for jid, job in session.jobs.items()},
+        "current_job": session.current_job
     })
     
     try:
         while True:
             data = await websocket.receive_json()
-            await handle_ws_message(websocket, data)
+            await handle_ws_message(websocket, session, data)
     except WebSocketDisconnect:
-        if websocket in state.websockets:
-            state.websockets.remove(websocket)
+        if websocket in session.websockets:
+            session.websockets.remove(websocket)
+        print(f"[WebSocket] Client disconnected from session {session_id[:8]}... (remaining: {len(session.websockets)})")
 
 
-async def handle_ws_message(ws: WebSocket, data: Dict):
+async def handle_ws_message(ws: WebSocket, session: MinerState, data: Dict):
     """Handle incoming WebSocket messages."""
     msg_type = data.get("type")
+    session.touch()  # Update last activity
     
     if msg_type == "ping":
         await ws.send_json({"type": "pong"})
     
     elif msg_type == "add_text":
-        await handle_add_text(data)
+        await handle_add_text(session, data)
     
     elif msg_type == "scan_pdfs":
-        await handle_scan_pdfs(data)
+        await handle_scan_pdfs(session, data)
     
     elif msg_type == "scan_images":
-        await handle_scan_images(data)
+        await handle_scan_images(session, data)
     
     elif msg_type == "clear_corpus":
-        state.clear()
-        await state.broadcast({"type": "corpus_cleared"})
+        session.clear()
+        await session.broadcast({"type": "corpus_cleared"})
     
     elif msg_type == "remove_item":
-        await handle_remove_item(data)
+        await handle_remove_item(session, data)
     
     elif msg_type == "start_mining":
         config = data.get("config", {})
-        await start_mining_job(config)
+        await start_mining_job(session, config)
     
     elif msg_type == "cancel_job":
         job_id = data.get("job_id")
-        if job_id and job_id in state.jobs:
-            state.jobs[job_id].status = "cancelled"
-            await state.broadcast({"type": "job_cancelled", "job_id": job_id})
+        if job_id and job_id in session.jobs:
+            session.jobs[job_id].status = "cancelled"
+            await session.broadcast({"type": "job_cancelled", "job_id": job_id})
+    
+    elif msg_type == "rechunk_pdfs":
+        await handle_rechunk_pdfs(session, data)
 
 
 # ============================================================
 # Data Ingestion Handlers
 # ============================================================
 
-async def handle_add_text(data: Dict):
+async def handle_add_text(session: MinerState, data: Dict):
     """Add text to corpus with chunking."""
     text = data.get("text", "")
     source = data.get("source", "manual")
@@ -277,38 +393,38 @@ async def handle_add_text(data: Dict):
         # none / page
         chunks = [text] if text.strip() else []
     
-    # Add to state
+    # Add to session
     text_item = TextItem(
-        id=f"text_{len(state.texts)}",
+        id=f"text_{len(session.texts)}",
         text=text[:200] + "..." if len(text) > 200 else text,
         source=source,
         chunks=len(chunks)
     )
-    state.texts.append(text_item)
+    session.texts.append(text_item)
     
     # Add chunks
-    base_idx = len(state.text_chunks)
+    base_idx = len(session.text_chunks)
     for i, chunk in enumerate(chunks):
-        state.text_chunks.append({
+        session.text_chunks.append({
             "id": f"{source}_{base_idx + i}",
             "text": chunk,
             "source": source
         })
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "text_added",
         "texts": [{"source": source, "chunks": len(chunks)}],
         "chunks": len(chunks),
-        "total_chunks": len(state.text_chunks)
+        "total_chunks": len(session.text_chunks)
     })
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "corpus_updated",
-        **state.corpus_summary
+        **session.corpus_summary
     })
 
 
-async def handle_scan_pdfs(data: Dict):
+async def handle_scan_pdfs(session: MinerState, data: Dict):
     """Scan folder for PDFs and extract text."""
     folder_path = data.get("path", "")
     recursive = data.get("recursive", True)
@@ -320,7 +436,7 @@ async def handle_scan_pdfs(data: Dict):
     
     folder = Path(folder_path)
     if not folder.exists():
-        await state.broadcast({
+        await session.broadcast({
             "type": "scan_progress",
             "message": f"Folder not found: {folder_path}"
         })
@@ -331,13 +447,13 @@ async def handle_scan_pdfs(data: Dict):
     pdf_files = list(folder.glob(pattern))
     
     if not pdf_files:
-        await state.broadcast({
+        await session.broadcast({
             "type": "scan_progress",
             "message": "No PDF files found"
         })
         return
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "scan_progress",
         "message": f"Found {len(pdf_files)} PDFs, extracting text..."
     })
@@ -348,7 +464,7 @@ async def handle_scan_pdfs(data: Dict):
         has_extractor = True
     except ImportError:
         has_extractor = False
-        await state.broadcast({
+        await session.broadcast({
             "type": "scan_progress",
             "message": "PDF extraction not available (install pymupdf or pdfplumber)"
         })
@@ -386,9 +502,9 @@ async def handle_scan_pdfs(data: Dict):
                 else:
                     chunks = TextChunker.chunk_paragraphs(text)
                 
-                base_idx = len(state.text_chunks)
+                base_idx = len(session.text_chunks)
                 for i, chunk in enumerate(chunks):
-                    state.text_chunks.append({
+                    session.text_chunks.append({
                         "id": f"{pdf_path.name}_p{page_data['page']}_{base_idx + i}",
                         "text": chunk,
                         "source": pdf_path.name,
@@ -397,35 +513,35 @@ async def handle_scan_pdfs(data: Dict):
                     pdf_chunks += 1
             
             pdf_item = PDFItem(
-                id=f"pdf_{len(state.pdfs)}",
+                id=f"pdf_{len(session.pdfs)}",
                 path=str(pdf_path),
                 name=pdf_path.name,
                 pages=len(pages),
                 chunks=pdf_chunks
             )
-            state.pdfs.append(pdf_item)
+            session.pdfs.append(pdf_item)
             new_pdfs.append({"name": pdf_path.name, "pages": len(pages), "chunks": pdf_chunks})
             total_chunks += pdf_chunks
             
         except Exception as e:
-            await state.broadcast({
+            await session.broadcast({
                 "type": "scan_progress",
                 "message": f"Error reading {pdf_path.name}: {e}"
             })
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "pdf_scanned",
         "pdfs": new_pdfs,
         "chunks": total_chunks
     })
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "corpus_updated",
-        **state.corpus_summary
+        **session.corpus_summary
     })
 
 
-async def handle_scan_images(data: Dict):
+async def handle_scan_images(session: MinerState, data: Dict):
     """Scan folder for images."""
     folder_path = data.get("path", "")
     recursive = data.get("recursive", True)
@@ -437,7 +553,7 @@ async def handle_scan_images(data: Dict):
     
     folder = Path(folder_path)
     if not folder.exists():
-        await state.broadcast({
+        await session.broadcast({
             "type": "scan_progress",
             "message": f"Folder not found: {folder_path}"
         })
@@ -455,13 +571,13 @@ async def handle_scan_images(data: Dict):
                 break
     
     if not image_files:
-        await state.broadcast({
+        await session.broadcast({
             "type": "scan_progress",
             "message": "No image files found"
         })
         return
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "scan_progress",
         "message": f"Found {len(image_files)} images"
     })
@@ -470,17 +586,17 @@ async def handle_scan_images(data: Dict):
     new_images = []
     for img_path in image_files:
         img_item = ImageItem(
-            id=f"img_{len(state.images)}",
+            id=f"img_{len(session.images)}",
             path=str(img_path),
             name=img_path.name,
             folder=str(img_path.parent.name)
         )
-        state.images.append(img_item)
+        session.images.append(img_item)
         new_images.append({"name": img_path.name, "folder": img_item.folder})
     
     # Vision description if requested
     if describe:
-        await state.broadcast({
+        await session.broadcast({
             "type": "scan_progress",
             "message": "Describing images with Vision LLM..."
         })
@@ -490,9 +606,9 @@ async def handle_scan_images(data: Dict):
             describer = VisionDescriber()
             
             success_count = 0
-            for i, img in enumerate(state.images[-len(new_images):]):
+            for i, img in enumerate(session.images[-len(new_images):]):
                 if i % 5 == 0:
-                    await state.broadcast({
+                    await session.broadcast({
                         "type": "scan_progress",
                         "message": f"Describing image {i+1}/{len(new_images)}..."
                     })
@@ -507,48 +623,130 @@ async def handle_scan_images(data: Dict):
                 
                 await asyncio.sleep(0.01)  # Allow UI updates
             
-            await state.broadcast({
+            await session.broadcast({
                 "type": "scan_progress",
                 "message": f"Described {success_count}/{len(new_images)} images"
             })
                 
         except ImportError as e:
             print(f"[Vision] Import error: {e}")
-            await state.broadcast({
+            await session.broadcast({
                 "type": "scan_progress",
                 "message": "Vision describer not available"
             })
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "images_scanned",
         "images": new_images,
         "count": len(new_images)
     })
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "corpus_updated",
-        **state.corpus_summary
+        **session.corpus_summary
     })
 
 
-async def handle_remove_item(data: Dict):
+async def handle_remove_item(session: MinerState, data: Dict):
     """Remove an item from corpus."""
     item_type = data.get("item_type")
     index = data.get("index", -1)
     
-    if item_type == "pdf" and 0 <= index < len(state.pdfs):
-        removed = state.pdfs.pop(index)
+    if item_type == "pdf" and 0 <= index < len(session.pdfs):
+        removed = session.pdfs.pop(index)
         # Also remove associated chunks
-        state.text_chunks = [c for c in state.text_chunks if c.get("source") != removed.name]
-    elif item_type == "image" and 0 <= index < len(state.images):
-        state.images.pop(index)
-    elif item_type == "text" and 0 <= index < len(state.texts):
-        removed = state.texts.pop(index)
-        state.text_chunks = [c for c in state.text_chunks if c.get("source") != removed.source]
+        session.text_chunks = [c for c in session.text_chunks if c.get("source") != removed.name]
+    elif item_type == "image" and 0 <= index < len(session.images):
+        session.images.pop(index)
+    elif item_type == "text" and 0 <= index < len(session.texts):
+        removed = session.texts.pop(index)
+        session.text_chunks = [c for c in session.text_chunks if c.get("source") != removed.source]
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "corpus_updated",
-        **state.corpus_summary
+        **session.corpus_summary
+    })
+
+
+async def handle_rechunk_pdfs(session: MinerState, data: Dict):
+    """Rechunk all PDFs with new chunking parameters."""
+    chunking = data.get("chunking", "paragraph")
+    params = data.get("chunk_params", {})
+    
+    if not session.pdfs:
+        return
+    
+    # Import chunker
+    try:
+        from enhanced_miner import TextChunker
+    except ImportError:
+        await session.broadcast({
+            "type": "scan_progress",
+            "message": "TextChunker not available"
+        })
+        return
+    
+    await session.broadcast({
+        "type": "scan_progress",
+        "message": f"Rechunking {len(session.pdfs)} PDFs with {chunking} method..."
+    })
+    
+    # Remove all PDF-sourced chunks
+    pdf_names = {pdf.name for pdf in session.pdfs}
+    session.text_chunks = [c for c in session.text_chunks if c.get("source") not in pdf_names]
+    
+    # Re-chunk each PDF from stored raw pages
+    total_new_chunks = 0
+    for pdf in session.pdfs:
+        if not pdf.raw_pages:
+            continue
+        
+        pdf_chunks = 0
+        for page_data in pdf.raw_pages:
+            text = page_data.get("text", "")
+            if not text.strip():
+                continue
+            
+            # Apply new chunking with parameters
+            if chunking == "paragraph":
+                min_len = params.get("min_length", 50)
+                max_len = params.get("max_length", 1000)
+                chunks = TextChunker.chunk_paragraphs(text, min_length=min_len, max_length=max_len)
+            elif chunking == "sentence":
+                sent_per = params.get("sentences_per_chunk", 5)
+                overlap = params.get("overlap_sentences", 1)
+                chunks = TextChunker.chunk_sentences(text, sentences_per_chunk=sent_per, overlap_sentences=overlap)
+            elif chunking == "sliding":
+                window = params.get("window_size", 512)
+                stride = params.get("stride", 256)
+                chunks = TextChunker.chunk_sliding_window(text, window_size=window, stride=stride)
+            elif chunking == "page":
+                chunks = [text]
+            else:
+                chunks = TextChunker.chunk_paragraphs(text)
+            
+            base_idx = len(session.text_chunks)
+            for i, chunk in enumerate(chunks):
+                session.text_chunks.append({
+                    "id": f"{pdf.name}_p{page_data['page']}_{base_idx + i}",
+                    "text": chunk,
+                    "source": pdf.name,
+                    "page": page_data["page"]
+                })
+                pdf_chunks += 1
+        
+        pdf.chunks = pdf_chunks
+        total_new_chunks += pdf_chunks
+    
+    await session.broadcast({
+        "type": "rechunk_complete",
+        "chunks": total_new_chunks,
+        "message": f"Rechunked to {total_new_chunks} chunks"
+    })
+    
+    await session.broadcast({
+        "type": "corpus_updated",
+        **session.corpus_summary
     })
 
 
@@ -865,9 +1063,8 @@ def compute_archetype_metrics(archetypes: Dict, embedder, clusters: Dict = None,
 # Mining Pipeline
 # ============================================================
 
-async def start_mining_job(config: Dict):
+async def start_mining_job(session: MinerState, config: Dict):
     """Start a new mining job with real-time progress updates."""
-    import uuid
     
     job_id = str(uuid.uuid4())[:8]
     job = MiningJob(
@@ -876,28 +1073,28 @@ async def start_mining_job(config: Dict):
         created_at=datetime.now().isoformat(),
         config=config
     )
-    state.jobs[job_id] = job
-    state.current_job = job_id
+    session.jobs[job_id] = job
+    session.current_job = job_id
     
-    await state.broadcast({
+    await session.broadcast({
         "type": "job_created",
         "job": asdict(job)
     })
     
     # Run mining in background
-    asyncio.create_task(run_mining_pipeline(job_id, config))
+    asyncio.create_task(run_mining_pipeline(session, job_id, config))
 
 
-async def run_mining_pipeline(job_id: str, config: Dict):
+async def run_mining_pipeline(session: MinerState, job_id: str, config: Dict):
     """Execute the full mining pipeline with real-time updates."""
-    job = state.jobs[job_id]
+    job = session.jobs[job_id]
     job.status = "running"
     
     async def update_progress(stage: str, progress: float, detail: str = ""):
         job.stage = stage
         job.progress = progress
-        log_entry = state.log(job_id, f"{stage}: {detail}" if detail else stage)
-        await state.broadcast({
+        log_entry = session.log(job_id, f"{stage}: {detail}" if detail else stage)
+        await session.broadcast({
             "type": "progress",
             "job_id": job_id,
             "stage": stage,
@@ -919,20 +1116,20 @@ async def run_mining_pipeline(job_id: str, config: Dict):
         
         # Initialize embedder (handle cloudflare variants)
         embedder_type = config.get("embedder", "cloudflare")
-        if state.embedder is None or state._current_embedder != embedder_type:
+        if session.embedder is None or session._current_embedder != embedder_type:
             await update_progress("Loading embedder", 0.05, embedder_type)
             
             # Map UI values to backend + model
             if embedder_type == "cloudflare":
-                state.embedder = TextEmbedder(backend="cloudflare", model="@cf/baai/bge-base-en-v1.5")
+                session.embedder = TextEmbedder(backend="cloudflare", model="@cf/baai/bge-base-en-v1.5")
             elif embedder_type == "cloudflare-large":
-                state.embedder = TextEmbedder(backend="cloudflare", model="@cf/baai/bge-large-en-v1.5")
+                session.embedder = TextEmbedder(backend="cloudflare", model="@cf/baai/bge-large-en-v1.5")
             elif embedder_type == "cloudflare-qwen3":
-                state.embedder = TextEmbedder(backend="cloudflare", model="@cf/qwen/qwen3-embedding-0.6b")
+                session.embedder = TextEmbedder(backend="cloudflare", model="@cf/qwen/qwen3-embedding-0.6b")
             else:
-                state.embedder = TextEmbedder(backend=embedder_type)
+                session.embedder = TextEmbedder(backend=embedder_type)
             
-            state._current_embedder = embedder_type
+            session._current_embedder = embedder_type
         
         await update_progress("Creating miner", 0.1)
         
@@ -946,25 +1143,25 @@ async def run_mining_pipeline(job_id: str, config: Dict):
         
         # Create miner
         miner = EnhancedArchetypeMiner(
-            text_encoder=state.embedder,
-            image_encoder=state.image_encoder,
+            text_encoder=session.embedder,
+            image_encoder=session.image_encoder,
             llm_refiner=llm_refiner
         )
         
         # Add text chunks
-        await update_progress("Loading corpus", 0.15, f"{len(state.text_chunks)} chunks")
+        await update_progress("Loading corpus", 0.15, f"{len(session.text_chunks)} chunks")
         
-        for i, chunk in enumerate(state.text_chunks):
+        for i, chunk in enumerate(session.text_chunks):
             miner.add_text(chunk["text"], source=chunk.get("source", "unknown"), chunk=False)
             if i % 50 == 0 and i > 0:
-                await update_progress("Loading corpus", 0.15 + 0.05 * (i / len(state.text_chunks)), 
-                                     f"Chunk {i}/{len(state.text_chunks)}")
+                await update_progress("Loading corpus", 0.15 + 0.05 * (i / len(session.text_chunks)), 
+                                     f"Chunk {i}/{len(session.text_chunks)}")
         
         # Add images
-        if state.images:
-            await update_progress("Loading images", 0.2, f"{len(state.images)} images")
+        if session.images:
+            await update_progress("Loading images", 0.2, f"{len(session.images)} images")
             images_with_descriptions = 0
-            for img in state.images:
+            for img in session.images:
                 miner.corpus.images.append(type('ImageItem', (), {
                     'id': img.id,
                     'path': img.path,
@@ -996,10 +1193,10 @@ async def run_mining_pipeline(job_id: str, config: Dict):
             
             if images_with_descriptions > 0:
                 await update_progress("Loading images", 0.22, 
-                    f"{len(state.images)} images ({images_with_descriptions} with descriptions)")
+                    f"{len(session.images)} images ({images_with_descriptions} with descriptions)")
             else:
                 await update_progress("Loading images", 0.22,
-                    f"{len(state.images)} images (using filenames - enable Vision LLM for better results)")
+                    f"{len(session.images)} images (using filenames - enable Vision LLM for better results)")
         
         # Embedding
         await update_progress("Embedding", 0.25, "Computing embeddings...")
@@ -1145,7 +1342,7 @@ async def run_mining_pipeline(job_id: str, config: Dict):
             graph_data["edges"].append({"source": u, "target": v})
         
         # Compute ambiguity metrics for each archetype (using descriptor embeddings)
-        metrics = compute_archetype_metrics(archetypes, state.embedder)
+        metrics = compute_archetype_metrics(archetypes, session.embedder)
         
         # Done
         job.status = "completed"
@@ -1164,9 +1361,9 @@ async def run_mining_pipeline(job_id: str, config: Dict):
         }
         
         print(f"[Mining] Job completed. Archetypes: {list(archetypes.keys())}")
-        print(f"[Mining] Broadcasting to {len(state.websockets)} websockets...")
+        print(f"[Mining] Broadcasting to {len(session.websockets)} websockets...")
         
-        await state.broadcast({
+        await session.broadcast({
             "type": "job_completed",
             "job_id": job_id,
             "result": job.result
@@ -1177,10 +1374,10 @@ async def run_mining_pipeline(job_id: str, config: Dict):
     except Exception as e:
         job.status = "failed"
         job.error = str(e)
-        state.log(job_id, f"ERROR: {e}")
-        state.log(job_id, traceback.format_exc())
+        session.log(job_id, f"ERROR: {e}")
+        session.log(job_id, traceback.format_exc())
         
-        await state.broadcast({
+        await session.broadcast({
             "type": "job_failed",
             "job_id": job_id,
             "error": str(e)
@@ -1188,18 +1385,33 @@ async def run_mining_pipeline(job_id: str, config: Dict):
 
 
 # ============================================================
-# REST Endpoints
+# REST Endpoints (Session-aware via X-Session-Id header)
 # ============================================================
 
+def get_session_from_request(request: Request) -> Optional[MinerState]:
+    """Get session from request header or return None."""
+    session_id = request.headers.get("X-Session-Id")
+    if session_id:
+        return session_manager.get(session_id)
+    return None
+
+
 @app.get("/api/corpus")
-async def get_corpus():
-    return state.corpus_summary
+async def get_corpus(request: Request):
+    session = get_session_from_request(request)
+    if not session:
+        return {"error": "No session. Connect via WebSocket first.", "pdfs": 0, "images": 0, "texts": 0, "chunks": 0}
+    return session.corpus_summary
 
 @app.post("/upload/pdf")
-async def upload_pdf(file: UploadFile = File(...), chunking: str = Form("{}")):
+async def upload_pdf(request: Request, file: UploadFile = File(...), chunking: str = Form("{}")):
     """Upload and process a single PDF file."""
     import tempfile
     import json
+    
+    session = get_session_from_request(request)
+    if not session:
+        return {"error": "No session. Connect via WebSocket first."}
     
     # Parse chunking config
     try:
@@ -1250,9 +1462,9 @@ async def upload_pdf(file: UploadFile = File(...), chunking: str = Form("{}")):
             else:
                 chunks = TextChunker.chunk_paragraphs(text)
             
-            base_idx = len(state.text_chunks)
+            base_idx = len(session.text_chunks)
             for i, chunk in enumerate(chunks):
-                state.text_chunks.append({
+                session.text_chunks.append({
                     "id": f"{file.filename}_p{page_data['page']}_{base_idx + i}",
                     "text": chunk,
                     "source": file.filename,
@@ -1261,17 +1473,18 @@ async def upload_pdf(file: UploadFile = File(...), chunking: str = Form("{}")):
                 pdf_chunks += 1
         
         pdf_item = PDFItem(
-            id=f"pdf_{len(state.pdfs)}",
+            id=f"pdf_{len(session.pdfs)}",
             path=file.filename,
             name=file.filename,
             pages=len(pages),
-            chunks=pdf_chunks
+            chunks=pdf_chunks,
+            raw_pages=pages  # Store raw pages for rechunking
         )
-        state.pdfs.append(pdf_item)
+        session.pdfs.append(pdf_item)
         
-        await state.broadcast({
+        await session.broadcast({
             "type": "corpus_updated",
-            **state.corpus_summary
+            **session.corpus_summary
         })
         
         return {"name": file.filename, "pages": len(pages), "chunks": pdf_chunks}
@@ -1285,6 +1498,10 @@ async def upload_image(request: Request, file: UploadFile = File(...), describe:
     """Upload and process a single image file."""
     import tempfile
     import base64
+    
+    session = get_session_from_request(request)
+    if not session:
+        return {"error": "No session. Connect via WebSocket first."}
     
     # Debug: log raw form data
     form = await request.form()
@@ -1323,16 +1540,16 @@ async def upload_image(request: Request, file: UploadFile = File(...), describe:
                     cache_path = Path(__file__).parent / "static" / "word_embeddings.npy"
                     cache_path.parent.mkdir(exist_ok=True)
                     
-                    if not hasattr(state, '_semantic_matcher') or state._semantic_matcher is None:
-                        state._semantic_matcher = SemanticWordMatcher(cache_path=str(cache_path))
+                    if not hasattr(session, '_semantic_matcher') or session._semantic_matcher is None:
+                        session._semantic_matcher = SemanticWordMatcher(cache_path=str(cache_path))
                     
                     try:
-                        description = state._semantic_matcher.describe_image_with_llm(tmp_path)
+                        description = session._semantic_matcher.describe_image_with_llm(tmp_path)
                     except Exception as matcher_error:
                         print(f"[Upload] Matcher error, recreating: {matcher_error}", flush=True)
                         # Recreate matcher in case of stale state
-                        state._semantic_matcher = SemanticWordMatcher(cache_path=str(cache_path))
-                        description = state._semantic_matcher.describe_image_with_llm(tmp_path)
+                        session._semantic_matcher = SemanticWordMatcher(cache_path=str(cache_path))
+                        description = session._semantic_matcher.describe_image_with_llm(tmp_path)
                 
                 print(f"[Upload] Got description: {description[:80] if description else 'None'}...", flush=True)
             except Exception as e:
@@ -1347,25 +1564,25 @@ async def upload_image(request: Request, file: UploadFile = File(...), describe:
                     pass
         
         img_item = ImageItem(
-            id=f"img_{len(state.images)}",
+            id=f"img_{len(session.images)}",
             path=file.filename,
             name=file.filename,
             folder="upload",
             description=description
         )
-        state.images.append(img_item)
+        session.images.append(img_item)
         
         # If described, add as text chunk too
         if description:
-            state.text_chunks.append({
-                "id": f"img_desc_{len(state.text_chunks)}",
+            session.text_chunks.append({
+                "id": f"img_desc_{len(session.text_chunks)}",
                 "text": description,
                 "source": f"image:{file.filename}"
             })
         
-        await state.broadcast({
+        await session.broadcast({
             "type": "corpus_updated",
-            **state.corpus_summary
+            **session.corpus_summary
         })
         
         return {"name": file.filename, "described": description is not None}
@@ -1375,24 +1592,33 @@ async def upload_image(request: Request, file: UploadFile = File(...), describe:
 
 
 @app.delete("/api/corpus")
-async def clear_corpus():
-    state.clear()
-    await state.broadcast({"type": "corpus_cleared"})
+async def clear_corpus(request: Request):
+    session = get_session_from_request(request)
+    if not session:
+        return {"error": "No session"}
+    session.clear()
+    await session.broadcast({"type": "corpus_cleared"})
     return {"status": "cleared"}
 
 @app.get("/api/jobs")
-async def list_jobs():
-    return {jid: asdict(job) for jid, job in state.jobs.items()}
+async def list_jobs(request: Request):
+    session = get_session_from_request(request)
+    if not session:
+        return {}
+    return {jid: asdict(job) for jid, job in session.jobs.items()}
 
 @app.get("/api/jobs/{job_id}")
-async def get_job(job_id: str):
-    if job_id not in state.jobs:
+async def get_job(request: Request, job_id: str):
+    session = get_session_from_request(request)
+    if not session:
+        raise HTTPException(status_code=404, detail="No session")
+    if job_id not in session.jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    return asdict(state.jobs[job_id])
+    return asdict(session.jobs[job_id])
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "chunks": len(state.text_chunks), "images": len(state.images)}
+    return {"status": "ok", "active_sessions": session_manager.active_count}
 
 
 @app.post("/api/export-to-delyrism")
