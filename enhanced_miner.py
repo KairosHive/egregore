@@ -1716,14 +1716,64 @@ class LLMArchetypeRefiner:
         self.output_language = output_language.lower()
         self.temperature = temperature
     
-    def _get_language_instruction(self) -> str:
-        """Get the language instruction to append to prompts."""
+    def _get_language_instruction(self, semantic_spread: float = 0.5) -> str:
+        """Get the language instruction to append to prompts.
+        
+        semantic_spread: 0=focused, 1=divergent - affects naming style
+        """
         lang = self.SUPPORTED_LANGUAGES.get(self.output_language, "English")
         if lang == "English":
             return ""  # No instruction needed for English
+        
+        # Determine mode based on semantic spread
+        if semantic_spread < 0.3:
+            mode = "focused"
+            style_guidance = f"""
+STYLE FOCALISÉ / FOCUSED STYLE:
+- Archetype names: 1 word preferred, 2 words maximum
+- Use evocative, poetic {lang} words that clearly relate to the source corpus
+- Names should feel grounded yet have symbolic weight
+- The name must emerge FROM the corpus themes, not be imposed upon them
+- Vocabulary: literary but accessible - words a cultured reader would know"""
+        elif semantic_spread < 0.7:
+            mode = "balanced"
+            style_guidance = f"""
+STYLE ÉQUILIBRÉ / BALANCED STYLE - SOPHISTICATED VOCABULARY REQUIRED:
+- Archetype names: 1-2 words with deep etymological roots
+- MANDATORY: Use rare, scholarly, or archaic {lang} words
+- Names MUST feel like they come from: a medieval bestiary, a botanical treatise, an alchemical text, or ancient philosophy
+- Prefer words with Latin/Greek/Germanic etymological depth
+- The name connects to source corpus through abstract/symbolic associations
+- FORBIDDEN: everyday words, simple nouns, common adjectives
+- If a 12-year-old would easily understand the word, it is TOO SIMPLE - find a rarer synonym"""
+        else:
+            mode = "divergent"
+            style_guidance = f"""
+STYLE DIVERGENT / DIVERGENT STYLE - MAXIMALLY RARE VOCABULARY:
+- Archetype names: 1-2 words, cryptic, archaic, or neologistic
+- MANDATORY: Use the most obscure, specialized, or invented {lang} words possible
+- Names should feel alien, ancient, or scientifically precise
+- Draw from: alchemy, botany, geology, anatomy, medieval terminology, dead languages
+- The stranger and more unfamiliar the word, the BETTER
+- Create compound words or resurrect archaic terms if needed
+- If the word appears in everyday conversation, it is WRONG"""
+        
         return f"""\n\nOUTPUT LANGUAGE: Generate ALL archetype names and descriptors in {lang}.
-Use evocative, poetic {lang} vocabulary. Do NOT use English words. Rely on the richness of the {lang} language.
-The JSON keys ("name", "descriptors", "essence", "archetypes") must remain in English, but all VALUES must be in {lang}."""
+Exploit the full etymological richness of {lang}. Do NOT use English words.
+The JSON keys ("name", "descriptors", "essence", "archetypes") must remain in English, but all VALUES must be in {lang}.
+{style_guidance}
+
+VOCABULARY QUALITY - ABSOLUTELY CRITICAL FOR {lang.upper()}:
+- In {lang}, you MUST use sophisticated, literary, or technical vocabulary
+- USE: technical terms, Latin/Greek derivatives, archaic vocabulary, scientific nomenclature, literary archaisms, neologisms from classical roots
+- Every descriptor should require a dictionary lookup for most readers
+
+CRITICAL RULES:
+- Archetype names: 1-2 words MAXIMUM
+- No articles (le/la/les, el/la/los, der/die/das)
+- No phrases or compound titles
+- Names must connect to source corpus themes
+- DESCRIPTORS: Only nouns, adjectives, or verbs. NO prepositions (de/à/pour/dans, de/a/para/en, von/zu/für/in). NO pronouns. NO articles. Each descriptor must be a single meaningful word."""
     
     def _call_cloudflare(self, messages: List[Dict], max_tokens: int = 2048, temperature: Optional[float] = None) -> str:
         """Call Cloudflare Workers AI."""
@@ -1951,7 +2001,7 @@ RULES:
 4. Name should be 1-2 words only
 5. TRANSFORM basic concepts into unusual/specific vocabulary - never copy them directly
 6. SINGLE-WORD descriptors only. Maximum 2 two-word phrases per archetype.
-{self._get_language_instruction()}
+{self._get_language_instruction(semantic_spread)}
 Output JSON only:
 {{
   "name": "ARCHETYPE NAME",
@@ -2097,7 +2147,7 @@ RULES:
 - NO proper nouns
 - Each descriptor in exactly ONE archetype
 - 8-12 descriptors per archetype
-{self._get_language_instruction()}
+{self._get_language_instruction(semantic_spread)}
 Output valid JSON:
 {{
   "archetypes": [

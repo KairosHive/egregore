@@ -3040,6 +3040,10 @@
                                     <span id="selectedArchetypesCount">0</span> selected
                                     <button class="btn btn-secondary btn-sm" onclick="clearArchetypeSelection()" id="clearSelectionBtn" style="display: none;">Clear</button>
                                 </div>
+                                <label class="bridge-option" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted); cursor: pointer;">
+                                    <input type="checkbox" id="enforceSemanticBridges" checked style="accent-color: var(--accent-mystic);" />
+                                    <span>🌉 Enforce semantic bridges in prompt</span>
+                                </label>
                             </div>
                             
                             <!-- Style Options -->
@@ -3065,6 +3069,18 @@
                                     <label class="style-option">
                                         <input type="radio" name="visualStyle" value="cosmological" />
                                         <span class="style-option-label">🌌 Cosmological</span>
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="visualStyle" value="elemental" />
+                                        <span class="style-option-label">⚡ Elemental</span>
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="visualStyle" value="scalefree" />
+                                        <span class="style-option-label">🔬 Scale-free</span>
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="visualStyle" value="creatures" />
+                                        <span class="style-option-label">🐲 Creatures</span>
                                     </label>
                                 </div>
                             </div>
@@ -5018,12 +5034,38 @@
                 return `${name}: ${words.slice(0, 8).join(', ')}`;
             }).join('\n');
             
+            // Find semantic bridges between the selected archetypes (if checkbox is checked)
+            let bridgeSection = '';
+            const enforceBridges = document.getElementById('enforceSemanticBridges')?.checked ?? true;
+            if (enforceBridges && topologyData && topologyData.bridges && topologyData.bridges.length > 0) {
+                // Filter bridges that connect the selected archetypes
+                const relevantBridges = topologyData.bridges.filter(bridge => {
+                    const [a1, a2] = bridge.archetypes;
+                    return archetypes.includes(a1) && archetypes.includes(a2);
+                });
+                
+                if (relevantBridges.length > 0) {
+                    const bridgeDescriptions = relevantBridges.slice(0, 5).map(bridge => {
+                        return `"${bridge.descriptor}" bridges ${bridge.archetypes[0]} ↔ ${bridge.archetypes[1]}`;
+                    }).join('\n');
+                    
+                    bridgeSection = `
+SEMANTIC BRIDGES (words that connect archetypes - use these to visualize the interaction):
+${bridgeDescriptions}
+
+These bridge words represent the conceptual overlap between archetypes. Visualize these connections prominently - they are the semantic representations of the interaction points where the archetypes meet and interact.`;
+                }
+            }
+            
             // Style descriptions inspired by Codex Seraphinianus
             const styleDescriptions = {
                 botanical: 'fantastical botanical illustrations with impossible hybrid plants, root systems that form symbolic connections, flowering structures that represent concepts, in the style of ancient herbal manuscripts crossed with alien botany',
                 mechanical: 'intricate mechanical diagrams with gears, pistons, and clockwork mechanisms that impossibly transform into organic forms, technical cross-sections revealing inner symbolic workings, brass and copper tones',
                 anatomical: 'surreal anatomical illustrations combining human, animal, and imaginary organ structures, medical diagrams of impossible beings, veins and nerves as channels of meaning, on aged parchment',
-                cosmological: 'celestial maps and astronomical charts with orbiting symbolic bodies, zodiacal wheel arrangements, cosmic diagrams showing the gravitational relationships between concepts, deep space mysticism'
+                cosmological: 'celestial maps and astronomical charts with orbiting symbolic bodies, zodiacal wheel arrangements, cosmic diagrams showing the gravitational relationships between concepts, deep space mysticism',
+                elemental: 'diagrams of impossible physics and new elemental forces - gravity bending into spirals, light crystallizing into solid forms, magnetic fields visible as flowing ribbons, thermodynamic processes that reverse entropy, forces that push and pull between the archetypes like a physics textbook from another dimension',
+                scalefree: 'fractal zoom illustration showing the archetypes manifesting simultaneously at quantum, cellular, human, planetary, and cosmic scales - atoms that mirror galaxies, cells that contain cities, a continuous visual journey from the infinitesimal to the infinite where patterns repeat across all scales of existence',
+                creatures: 'bestiary of fantastical beings and characters that embody each archetype - chimeric creatures with symbolic anatomies, masked figures in ritual poses, mythological hybrids, spirit animals with glowing sigils, humanoid forms merged with abstract concepts, each creature interacting with the others in a symbolic ecosystem'
             };
             
             const styleDesc = styleDescriptions[style] || styleDescriptions.botanical;
@@ -5033,6 +5075,7 @@
 The image should visualize the INTERACTION and RELATIONSHIP between these archetypal concepts:
 
 ${archetypeDescriptions}
+${bridgeSection}
 
 Style requirements:
 - ${styleDesc}
