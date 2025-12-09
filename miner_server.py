@@ -1576,8 +1576,23 @@ async def upload_image(request: Request, file: UploadFile = File(...), describe:
                     describer = VisionDescriber()
                     description = describer.describe_image(tmp_path)
                 else:
-                    # Use Semantic matching (fast)
-                    from enhanced_miner import SemanticWordMatcher
+                    # Use Semantic matching (fast) - requires CLIP and torch
+                    try:
+                        from enhanced_miner import SemanticWordMatcher
+                    except ImportError as ie:
+                        print(f"[Upload] SemanticWordMatcher not available (torch/clip not installed): {ie}", flush=True)
+                        print("[Upload] Falling back to Vision LLM method", flush=True)
+                        # Fallback to Vision LLM if CLIP dependencies not available
+                        try:
+                            from enhanced_miner import VisionDescriber
+                            describer = VisionDescriber()
+                            description = describer.describe_image(tmp_path)
+                        except Exception as fallback_e:
+                            print(f"[Upload] Vision LLM fallback also failed: {fallback_e}", flush=True)
+                            description = None
+                        # Skip the rest of the semantic matcher code
+                        raise ImportError("Using fallback")
+                    
                     print(f"[Upload] Using Semantic CLIP matching for {file.filename}...", flush=True)
                     
                     # Use cached matcher if available, recreate if it seems broken
@@ -1597,6 +1612,9 @@ async def upload_image(request: Request, file: UploadFile = File(...), describe:
                         description = session._semantic_matcher.describe_image_with_llm(tmp_path)
                 
                 print(f"[Upload] Got description: {description[:80] if description else 'None'}...", flush=True)
+            except ImportError:
+                # Already handled above with fallback
+                pass
             except Exception as e:
                 print(f"[Upload] Description error: {e}", flush=True)
                 import traceback

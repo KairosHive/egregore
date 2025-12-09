@@ -1,18 +1,36 @@
+# Core dependencies (required)
 fastapi
 uvicorn[standard]
 websockets
 numpy
-torch
-transformers
-sentence-transformers
 scikit-learn
 Pillow
 pymupdf
 httpx
 pydantic
 python-multipart
+requests
+
+# ============================================================
+# RAILWAY MEMORY OPTIMIZATION
+# ============================================================
+# If you're running out of memory on Railway:
+# 1. Comment out the "Heavy ML dependencies" section below
+# 2. Use "Cloudflare" embedder (default) instead of local models
+# 3. Use "Vision LLM" for image description instead of "Semantic (CLIP)"
+#
+# The Cloudflare embedder uses API calls instead of loading models locally,
+# reducing memory from ~3GB to ~200MB.
+# ============================================================
+
+# Heavy ML dependencies - for local models and CLIP semantic matching
+# These add ~2-3GB memory usage. Comment out if using Cloudflare API only.
+torch --index-url https://download.pytorch.org/whl/cpu
 ftfy
 regex
 faiss-cpu
-httpx
 git+https://github.com/openai/CLIP.git
+
+# These are only needed for local sentence-transformer/Qwen models
+# transformers
+# sentence-transformers

@@ -1,7 +1,17 @@
 from typing import Optional, List, Union
 from pathlib import Path
 import numpy as np
-import torch
+
+# Lazy-load torch to save ~2GB memory when using Cloudflare backend
+torch = None
+
+def _get_torch():
+    """Lazy import of torch to avoid loading it when not needed."""
+    global torch
+    if torch is None:
+        import torch as _torch
+        torch = _torch
+    return torch
 
 
 class TextEmbedder:
@@ -18,7 +28,6 @@ class TextEmbedder:
         self.backend_type = backend.lower()
         self.model_name = model
         self.dim = dim_fallback
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.pooling = pooling.lower()
         self.default_instruction = default_instruction
         self.default_context = default_context
@@ -27,6 +36,13 @@ class TextEmbedder:
         self._tokenizer = None
         self._proj = None
         self.audio_capable = False        # <-- ADD
+        
+        # Only determine device if we need torch (not for cloudflare)
+        if self.backend_type == "cloudflare":
+            self.device = "cpu"  # placeholder, not used
+        else:
+            _torch = _get_torch()
+            self.device = device or ("cuda" if _torch.cuda.is_available() else "cpu")
 
         if self.backend_type == "sentence-transformer":
             self._init_original(model or "sentence-transformers/all-mpnet-base-v2")
@@ -144,11 +160,12 @@ class TextEmbedder:
 
     def _init_clap(self, model_name: str):
         try:
+            _torch = _get_torch()
             from transformers import ClapProcessor, ClapModel
             self.clap_processor = ClapProcessor.from_pretrained(model_name)
             self._clap = ClapModel.from_pretrained(model_name).to(self.device)
             self._clap.eval()
-            with torch.no_grad():
+            with _torch.no_grad():
                 dummy = np.zeros(48000, dtype=np.float32)  # 1s silence @48k
                 ain = self.clap_processor(audios=[dummy], sampling_rate=48000, return_tensors="pt")
                 ain = {k: v.to(self.device) for k, v in ain.items()}
@@ -195,33 +212,34 @@ class TextEmbedder:
             raise RuntimeError(f"AudioCLIP init failed (open_clip): {e}")
 
     # --- replace your embed_audio_array fallback with this (no torchaudio) ---
-    @torch.no_grad()
     def embed_audio_array(self, wave: np.ndarray, sr: int) -> np.ndarray:
-        if self.backend_type == "audioclip":
-            # resample to 48k if needed
-            if sr != self._ac_sr:
-                t_old = np.linspace(0, 1, len(wave), endpoint=False)
-                t_new = np.linspace(0, 1, int(len(wave) * (self._ac_sr / sr)), endpoint=False)
-                wave = np.interp(t_new, t_old, wave).astype(np.float32)
-                sr = self._ac_sr
-            # center trim or pad to fixed length
-            if len(wave) > self._ac_len:
-                s = (len(wave) - self._ac_len) // 2
-                wave = wave[s:s+self._ac_len]
-            elif len(wave) < self._ac_len:
-                pad = self._ac_len - len(wave)
-                wave = np.pad(wave, (pad//2, pad - pad//2))
-            x = torch.from_numpy(wave).float().to(self.device)[None, None, :]  # (1,1,T)
-            z = self.audio_proj(x)[0]
-            z = z / (z.norm() + 1e-8)
-            return z.detach().cpu().float().numpy()
+        _torch = _get_torch()
+        with _torch.no_grad():
+            if self.backend_type == "audioclip":
+                # resample to 48k if needed
+                if sr != self._ac_sr:
+                    t_old = np.linspace(0, 1, len(wave), endpoint=False)
+                    t_new = np.linspace(0, 1, int(len(wave) * (self._ac_sr / sr)), endpoint=False)
+                    wave = np.interp(t_new, t_old, wave).astype(np.float32)
+                    sr = self._ac_sr
+                # center trim or pad to fixed length
+                if len(wave) > self._ac_len:
+                    s = (len(wave) - self._ac_len) // 2
+                    wave = wave[s:s+self._ac_len]
+                elif len(wave) < self._ac_len:
+                    pad = self._ac_len - len(wave)
+                    wave = np.pad(wave, (pad//2, pad - pad//2))
+                x = _torch.from_numpy(wave).float().to(self.device)[None, None, :]  # (1,1,T)
+                z = self.audio_proj(x)[0]
+                z = z / (z.norm() + 1e-8)
+                return z.detach().cpu().float().numpy()
 
-        if self.backend_type == "clap" and hasattr(self, "_clap"):
-            ain = self.clap_processor(audios=[wave], sampling_rate=sr, return_tensors="pt")
-            ain = {k: v.to(self.device) for k, v in ain.items()}
-            z = self._clap.get_audio_features(**ain)[0]
-            z = z / (z.norm() + 1e-8)
-            return z.detach().cpu().float().numpy()
+            if self.backend_type == "clap" and hasattr(self, "_clap"):
+                ain = self.clap_processor(audios=[wave], sampling_rate=sr, return_tensors="pt")
+                ain = {k: v.to(self.device) for k, v in ain.items()}
+                z = self._clap.get_audio_features(**ain)[0]
+                z = z / (z.norm() + 1e-8)
+                return z.detach().cpu().float().numpy()
 
         raise RuntimeError("embed_audio_array called but this backend has no audio path.")
 
@@ -237,6 +255,7 @@ class TextEmbedder:
 
     def _init_qwen(self, model_name):
         try:
+            _torch = _get_torch()
             print(f"[Embedder] Loading Qwen model: {model_name}")
             self._tokenizer = AutoTokenizer.from_pretrained(model_name)
             # Use low_cpu_mem_usage=True to optimize loading
@@ -252,14 +271,14 @@ class TextEmbedder:
             if self.device == "cpu":
                 try:
                     print("[Embedder] Applying dynamic int8 quantization for CPU...")
-                    self._backend = torch.quantization.quantize_dynamic(
-                        self._backend, {torch.nn.Linear}, dtype=torch.qint8
+                    self._backend = _torch.quantization.quantize_dynamic(
+                        self._backend, {_torch.nn.Linear}, dtype=_torch.qint8
                     )
                     print("[Embedder] Quantization complete.")
                 except Exception as e:
                     print(f"[Embedder] Quantization skipped: {e}")
             # probe dim with EOS pooling
-            with torch.no_grad():
+            with _torch.no_grad():
                 toks = self._tokenizer("probe", return_tensors="pt").to(self.device)
                 out = self._backend(**toks)
                 pooled = self._pool(out.last_hidden_state, toks["attention_mask"])
@@ -276,11 +295,13 @@ class TextEmbedder:
         print(f"[Embedder] Using hashing fallback ({self.dim}-d).")
 
     # ---------- pooling ----------
-    def _pool(self, last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    def _pool(self, last_hidden_state, attention_mask):
         """
-        last_hidden_state: [B, T, H]
-        attention_mask   : [B, T] with 1 for real tokens, 0 for pad
+        last_hidden_state: [B, T, H] torch.Tensor
+        attention_mask   : [B, T] torch.Tensor with 1 for real tokens, 0 for pad
+        Returns: torch.Tensor
         """
+        _torch = _get_torch()
         if self.pooling == "mean":
             # mean over non-padding tokens
             mask = attention_mask.unsqueeze(-1)  # [B, T, 1]
@@ -303,7 +324,7 @@ class TextEmbedder:
         idxs = attention_mask.sum(dim=1) - 1  # [B]
         idxs = idxs.clamp(min=0)
         bsz = last_hidden_state.size(0)
-        pooled = last_hidden_state[torch.arange(bsz, device=last_hidden_state.device), idxs, :]
+        pooled = last_hidden_state[_torch.arange(bsz, device=last_hidden_state.device), idxs, :]
         return _l2norm_torch(pooled)
 
     # ---------- input templating ----------
@@ -362,13 +383,14 @@ class TextEmbedder:
         
         # --- Qwen path ---
         if self._backend is not None and self._tokenizer is not None and self.backend_type in ("qwen2","qwen3"):
+            _torch = _get_torch()
             inputs = self._apply_prompt_template(texts, instruction, context)
             all_embeddings = []
             
             # Batch processing loop
             for i in range(0, len(inputs), batch_size):
                 batch_inputs = inputs[i : i + batch_size]
-                with torch.no_grad():
+                with _torch.no_grad():
                     toks = self._tokenizer(batch_inputs, padding=True, truncation=True, return_tensors="pt").to(self.device)
                     out = self._backend(**toks)
                     pooled = self._pool(out.last_hidden_state, toks["attention_mask"])
@@ -384,15 +406,17 @@ class TextEmbedder:
 
         # --- NEW: AudioCLIP text path (open_clip) ---
         if self.backend_type == "audioclip":
+            _torch = _get_torch()
             toks = self.oc_tokenizer(texts).to(self.device)   # list[str] -> token ids
-            with torch.no_grad():
+            with _torch.no_grad():
                 z = self.oc_model.encode_text(toks)           # [B, D]
                 z = z / (z.norm(dim=1, keepdim=True) + 1e-8)
             return z.detach().cpu().numpy().astype(np.float32)
 
         # inside TextEmbedder.encode(...)
         if self.backend_type == "clap" and hasattr(self, "_clap"):
-            with torch.no_grad():
+            _torch = _get_torch()
+            with _torch.no_grad():
                 tin = self.clap_processor(text=texts, return_tensors="pt", padding=True)
                 tin = {k: v.to(self.device) for k, v in tin.items()}
                 z = self._clap.get_text_features(**tin)  # [B, D]

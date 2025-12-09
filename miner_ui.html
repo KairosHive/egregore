@@ -260,6 +260,31 @@
             background: var(--bg-tertiary);
             border-radius: 20px;
             border: 1px solid var(--border);
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+        
+        .connection-badge:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-secondary);
+        }
+        
+        .connection-badge:hover::after {
+            content: 'Click to reconnect';
+            position: absolute;
+            bottom: -24px;
+            right: 0;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+        
+        .connection-badge.connected:hover::after {
+            content: 'Connected - Click to refresh';
         }
         
         .header-controls {
@@ -338,6 +363,16 @@
         .status-dot.connected { 
             background: var(--success);
             box-shadow: 0 0 8px var(--success);
+        }
+        
+        .status-dot.reconnecting {
+            background: var(--warning);
+            animation: pulse-reconnect 1s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-reconnect {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.3); }
         }
         
         /* Main Grid */
@@ -2321,7 +2356,7 @@
                     </select>
                 </div>
             </div>
-            <div class="connection-badge">
+            <div class="connection-badge" id="connectionBadge" onclick="forceReconnect()">
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Disconnected</span>
             </div>
@@ -3041,7 +3076,7 @@
                                     <button class="btn btn-secondary btn-sm" onclick="clearArchetypeSelection()" id="clearSelectionBtn" style="display: none;">Clear</button>
                                 </div>
                                 <label class="bridge-option" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted); cursor: pointer;">
-                                    <input type="checkbox" id="enforceSemanticBridges" checked style="accent-color: var(--accent-mystic);" />
+                                    <input type="checkbox" id="enforceSemanticBridges" style="accent-color: var(--accent-mystic);" />
                                     <span>🌉 Enforce semantic bridges in prompt</span>
                                 </label>
                             </div>
@@ -3466,8 +3501,48 @@
         
         let reconnectAttempts = 0;
         const maxReconnectDelay = 30000; // Max 30 seconds between reconnects
+        let reconnectTimeout = null;
+        let clientPingInterval = null;
+        
+        function updateConnectionStatus(status, message) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            const badge = document.getElementById('connectionBadge');
+            dot.classList.remove('connected', 'reconnecting');
+            badge.classList.remove('connected');
+            if (status === 'connected') {
+                dot.classList.add('connected');
+                badge.classList.add('connected');
+            } else if (status === 'reconnecting') {
+                dot.classList.add('reconnecting');
+            }
+            text.textContent = message;
+        }
+        
+        function startClientPing() {
+            // Client-side ping every 20s to keep Railway connection alive
+            if (clientPingInterval) clearInterval(clientPingInterval);
+            clientPingInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 20000);
+        }
+        
+        function stopClientPing() {
+            if (clientPingInterval) {
+                clearInterval(clientPingInterval);
+                clientPingInterval = null;
+            }
+        }
         
         function connect() {
+            // Clear any pending reconnect
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+            
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
             
@@ -3475,23 +3550,49 @@
                 reconnectAttempts = 0; // Reset on successful connection
                 // Send session ID as first message
                 ws.send(JSON.stringify({ type: 'init', session_id: sessionId }));
-                document.getElementById('statusDot').classList.add('connected');
-                document.getElementById('statusText').textContent = 'Connected';
+                updateConnectionStatus('connected', 'Connected');
                 addLog('Connected to server', 'success');
+                startClientPing();
             };
             
             ws.onclose = (event) => {
-                document.getElementById('statusDot').classList.remove('connected');
-                document.getElementById('statusText').textContent = 'Disconnected';
+                stopClientPing();
                 
-                // Exponential backoff for reconnection
+                // Faster reconnect for first few attempts (Railway can be flaky)
                 reconnectAttempts++;
-                const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), maxReconnectDelay);
-                console.log(`[WS] Connection closed (code: ${event.code}). Reconnecting in ${Math.round(delay/1000)}s...`);
-                setTimeout(connect, delay);
+                let delay;
+                if (reconnectAttempts <= 3) {
+                    delay = 500 * reconnectAttempts; // 500ms, 1s, 1.5s for first 3 attempts
+                } else {
+                    delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts - 3), maxReconnectDelay);
+                }
+                
+                console.log(`[WS] Connection closed (code: ${event.code}). Reconnecting in ${Math.round(delay/1000)}s... (attempt ${reconnectAttempts})`);
+                
+                // Show reconnecting status with countdown
+                let remaining = Math.ceil(delay / 1000);
+                updateConnectionStatus('reconnecting', `Reconnecting (${remaining}s)`);
+                
+                // Update countdown every second
+                const countdownInterval = setInterval(() => {
+                    remaining--;
+                    if (remaining > 0) {
+                        updateConnectionStatus('reconnecting', `Reconnecting (${remaining}s)`);
+                    } else {
+                        clearInterval(countdownInterval);
+                    }
+                }, 1000);
+                
+                reconnectTimeout = setTimeout(() => {
+                    clearInterval(countdownInterval);
+                    connect();
+                }, delay);
             };
             
-            ws.onerror = (err) => console.error('WebSocket error:', err);
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+                // Don't show error in UI - onclose will handle reconnection
+            };
             ws.onmessage = (e) => {
                 try {
                     const msg = JSON.parse(e.data);
@@ -3506,6 +3607,27 @@
                     console.error('[WS] Parse error:', err, e.data);
                 }
             };
+        }
+        
+        function forceReconnect() {
+            console.log('[WS] Force reconnect requested by user');
+            // Close existing connection if any
+            if (ws) {
+                // Temporarily remove onclose handler to avoid double-reconnect
+                ws.onclose = null;
+                ws.close();
+            }
+            // Clear any pending reconnect timeout
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+            stopClientPing();
+            // Reset attempt counter for fresh start
+            reconnectAttempts = 0;
+            updateConnectionStatus('reconnecting', 'Connecting...');
+            // Small delay to ensure clean disconnect
+            setTimeout(connect, 100);
         }
         
         function handleMessage(msg) {
@@ -5036,7 +5158,7 @@
             
             // Find semantic bridges between the selected archetypes (if checkbox is checked)
             let bridgeSection = '';
-            const enforceBridges = document.getElementById('enforceSemanticBridges')?.checked ?? true;
+            const enforceBridges = document.getElementById('enforceSemanticBridges')?.checked ?? false;
             if (enforceBridges && topologyData && topologyData.bridges && topologyData.bridges.length > 0) {
                 // Filter bridges that connect the selected archetypes
                 const relevantBridges = topologyData.bridges.filter(bridge => {
