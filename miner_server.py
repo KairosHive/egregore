@@ -75,6 +75,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static assets folder
+from fastapi.staticfiles import StaticFiles
+assets_path = Path(__file__).parent / "assets"
+if assets_path.exists():
+    app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+
 # ============================================================
 # Data Classes
 # ============================================================
