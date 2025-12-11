@@ -1,6 +1,6 @@
 # 🔮 Egregore
 
-**Archetype Mining & Semantic Distillation Engine**
+**Archetype Builder & Semantic Distillation Engine**
 
 Transform images, PDFs, and text into evocative archetypal concepts using AI-powered semantic analysis. Egregore discovers hidden patterns and symbolic relationships in your corpus, distilling them into rich, poetic archetypes.
 
