@@ -1499,7 +1499,12 @@ class VisionDescriber:
         import base64
         image_b64 = base64.b64encode(image_bytes).decode('utf-8')
         
-        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{self.model}"
+        import os as _os
+        _cf_gateway = _os.environ.get("CLOUDFLARE_GATEWAY_ID", "")
+        if _cf_gateway:
+            url = f"https://gateway.ai.cloudflare.com/v1/{account_id}/{_cf_gateway}/workers-ai/{self.model}"
+        else:
+            url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{self.model}"
         
         # Cloudflare Workers AI LLaVA format
         # image: array of integers 0-255 representing bytes
@@ -1514,7 +1519,11 @@ class VisionDescriber:
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json",
         }
-        
+        if _cf_gateway:
+            _cf_gateway_token = _os.environ.get("CLOUDFLARE_GATEWAY_TOKEN", "")
+            if _cf_gateway_token:
+                headers["cf-aig-authorization"] = f"Bearer {_cf_gateway_token}"
+
         print(f"[Vision] Sending request, image array length: {len(payload['image'])}, first bytes: {payload['image'][:10]}", flush=True)
         
         try:
@@ -1701,7 +1710,7 @@ class LLMArchetypeRefiner:
     def __init__(
         self,
         backend: Literal["cloudflare", "local"] = "cloudflare",
-        model: str = "@cf/meta/llama-3.1-8b-instruct",
+        model: str = "@cf/google/gemma-4-26b-a4b-it",
         cloudflare_account_id: Optional[str] = None,
         cloudflare_api_token: Optional[str] = None,
         local_model_loader: Optional[Callable] = None,
@@ -1791,13 +1800,24 @@ CRITICAL RULES:
                 "or add them to .streamlit/secrets.toml"
             )
         
-        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{self.model}"
+        import os as _os
+        _cf_gateway = _os.environ.get("CLOUDFLARE_GATEWAY_ID", "")
+        if _cf_gateway:
+            url = f"https://gateway.ai.cloudflare.com/v1/{account_id}/{_cf_gateway}/workers-ai/{self.model}"
+        else:
+            url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{self.model}"
         temp = temperature if temperature is not None else self.temperature
         
+        headers = {"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"}
+        if _cf_gateway:
+            _cf_gateway_token = _os.environ.get("CLOUDFLARE_GATEWAY_TOKEN", "")
+            if _cf_gateway_token:
+                headers["cf-aig-authorization"] = f"Bearer {_cf_gateway_token}"
+
         response = requests.post(
             url,
             json={"messages": messages, "max_tokens": max_tokens, "temperature": temp},
-            headers={"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"},
+            headers=headers,
             timeout=120
         )
         response.raise_for_status()

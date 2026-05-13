@@ -1169,12 +1169,15 @@ async def run_mining_pipeline(session: MinerState, job_id: str, config: Dict):
             await update_progress("Loading embedder", 0.05, embedder_type)
             
             # Map UI values to backend + model
-            if embedder_type == "cloudflare":
-                session.embedder = TextEmbedder(backend="cloudflare", model="@cf/baai/bge-base-en-v1.5")
-            elif embedder_type == "cloudflare-large":
-                session.embedder = TextEmbedder(backend="cloudflare", model="@cf/baai/bge-large-en-v1.5")
-            elif embedder_type == "cloudflare-qwen3":
-                session.embedder = TextEmbedder(backend="cloudflare", model="@cf/qwen/qwen3-embedding-0.6b")
+            CF_EMBEDDER_PRESETS = {
+                "cloudflare":               "@cf/baai/bge-base-en-v1.5",
+                "cloudflare-large":         "@cf/baai/bge-large-en-v1.5",
+                "cloudflare-bge-m3":        "@cf/baai/bge-m3",
+                "cloudflare-embeddinggemma":"@cf/google/embeddinggemma-300m",
+                "cloudflare-qwen3":         "@cf/qwen/qwen3-embedding-0.6b",
+            }
+            if embedder_type in CF_EMBEDDER_PRESETS:
+                session.embedder = TextEmbedder(backend="cloudflare", model=CF_EMBEDDER_PRESETS[embedder_type])
             else:
                 session.embedder = TextEmbedder(backend=embedder_type)
             
@@ -1187,7 +1190,7 @@ async def run_mining_pipeline(session: MinerState, job_id: str, config: Dict):
         if config.get("use_llm", True):
             llm_refiner = LLMArchetypeRefiner(
                 backend="cloudflare",
-                model=config.get("llm_model", "@cf/meta/llama-3.1-8b-instruct"),
+                model=config.get("llm_model", "@cf/google/gemma-4-26b-a4b-it"),
                 output_language=config.get("output_language", "english"),
                 temperature=config.get("temperature", 0.7)
             )

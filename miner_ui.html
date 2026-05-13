@@ -2675,6 +2675,9 @@
                             <select id="embedder">
                                 <option value="cloudflare-large">Cloudflare BGE-Large (1024d)</option>
                                 <option value="cloudflare">Cloudflare BGE-Base (768d, fast)</option>
+                                <option value="cloudflare-bge-m3">Cloudflare BGE-M3 (1024d, multilingual)</option>
+                                <option value="cloudflare-embeddinggemma">Cloudflare EmbeddingGemma (768d, 100+ langs)</option>
+                                <option value="cloudflare-qwen3">Cloudflare Qwen3 Embedding (1024d)</option>
                                 <option value="qwen3">Local Qwen3</option>
                                 <option value="sentence-transformer">Sentence Transformer</option>
                             </select>
@@ -2717,18 +2720,28 @@
                         <div class="input-group">
                             <label class="input-label">LLM Model</label>
                             <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <select id="llmModel" style="flex: 1;">
-                                    <option value="@cf/meta/llama-3.1-8b-instruct">Llama 3.1 8B (default)</option>
-                                    <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B (quality)</option>
-                                    <option value="@hf/google/gemma-7b-it">Google Gemma 7B</option>
+                                <select id="llmModel" style="flex: 1;" onchange="document.getElementById('llmModelCustomWrap').style.display = this.value === '__custom__' ? 'block' : 'none';">
+                                    <option value="@cf/google/gemma-4-26b-a4b-it">Gemma 4 26B A4B (default — MoE + thinking, 256k ctx)</option>
+                                    <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B Fast (premium EN prose)</option>
+                                    <option value="@cf/qwen/qwen3-30b-a3b-fp8">Qwen3 30B A3B (multilingual sibling, same price)</option>
+                                    <option value="@cf/qwen/qwq-32b">QwQ 32B (reasoning-tuned, structural narrative)</option>
+                                    <option value="@cf/moonshotai/kimi-k2.6">Kimi K2.6 (long-form, 262k ctx)</option>
+                                    <option value="@cf/zhipu/glm-4.7-flash">GLM 4.7 Flash (cheapest multilingual fallback)</option>
+                                    <option value="__custom__">Custom (specify below)…</option>
                                 </select>
                                 <div style="display: flex; align-items: center; gap: 0.25rem;">
                                     <label style="font-size: 0.6rem; color: var(--text-muted);">T°</label>
-                                    <input type="number" id="llmTemperature" value="0.7" min="0" max="1.5" step="0.1" 
+                                    <input type="number" id="llmTemperature" value="0.7" min="0" max="1.5" step="0.1"
                                            style="width: 45px; padding: 0.35rem; font-size: 0.7rem; text-align: center;
-                                                  background: var(--bg-primary); border: 1px solid var(--border); 
+                                                  background: var(--bg-primary); border: 1px solid var(--border);
                                                   border-radius: 4px; color: var(--text-primary);">
                                 </div>
+                            </div>
+                            <div id="llmModelCustomWrap" style="display:none; margin-top: 0.5rem;">
+                                <input type="text" id="llmModelCustom" placeholder="@cf/your-namespace/your-model-id"
+                                       style="width: 100%; padding: 0.4rem; font-size: 0.75rem;
+                                              background: var(--bg-primary); border: 1px solid var(--border);
+                                              border-radius: 4px; color: var(--text-primary);">
                             </div>
                         </div>
                         
@@ -4015,6 +4028,12 @@
             const outputLanguage = document.getElementById('outputLanguage').value;
             const llmTemperature = parseFloat(document.getElementById('llmTemperature').value) || 0.7;
                 
+            const llmModelSelectVal = document.getElementById('llmModel').value;
+            const llmModelCustomVal = (document.getElementById('llmModelCustom')?.value || '').trim();
+            const llmModelValue = (llmModelSelectVal === '__custom__' && llmModelCustomVal)
+                ? llmModelCustomVal
+                : llmModelSelectVal;
+
             ws.send(JSON.stringify({
                 type: 'start_mining',
                 config: {
@@ -4025,7 +4044,7 @@
                     min_cluster_size: parseInt(document.getElementById('minCluster').value),
                     resolution: parseFloat(document.getElementById('resolution').value),
                     use_llm: document.getElementById('useLLM').checked,
-                    llm_model: document.getElementById('llmModel').value,
+                    llm_model: llmModelValue,
                     semantic_spread: parseFloat(document.querySelector('input[name="semanticSpread"]:checked').value),
                     output_language: outputLanguage,
                     temperature: llmTemperature

@@ -109,18 +109,29 @@ class TextEmbedder:
         import requests
         import time
         
-        url = f"https://api.cloudflare.com/client/v4/accounts/{self._cf_account}/ai/run/{self._cf_model}"
+        import os as _os
+        _cf_gateway = _os.environ.get("CLOUDFLARE_GATEWAY_ID", "")
+        if _cf_gateway:
+            url = f"https://gateway.ai.cloudflare.com/v1/{self._cf_account}/{_cf_gateway}/workers-ai/{self._cf_model}"
+        else:
+            url = f"https://api.cloudflare.com/client/v4/accounts/{self._cf_account}/ai/run/{self._cf_model}"
         
+        headers = {
+            "Authorization": f"Bearer {self._cf_token}",
+            "Content-Type": "application/json",
+        }
+        if _cf_gateway:
+            _cf_gateway_token = _os.environ.get("CLOUDFLARE_GATEWAY_TOKEN", "")
+            if _cf_gateway_token:
+                headers["cf-aig-authorization"] = f"Bearer {_cf_gateway_token}"
+
         last_error = None
         for attempt in range(max_retries):
             try:
                 response = requests.post(
                     url,
                     json={"text": texts},
-                    headers={
-                        "Authorization": f"Bearer {self._cf_token}",
-                        "Content-Type": "application/json"
-                    },
+                    headers=headers,
                     timeout=120
                 )
                 response.raise_for_status()
