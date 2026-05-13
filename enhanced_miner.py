@@ -2120,7 +2120,9 @@ RULES:
 5. TRANSFORM basic concepts into unusual/specific vocabulary - never copy them directly
 6. SINGLE-WORD descriptors only. Maximum 2 two-word phrases per archetype.
 {self._get_language_instruction(semantic_spread)}
-Output JSON only:
+OUTPUT FORMAT — STRICT:
+Respond with the JSON object ONLY. No preamble. No "Here is the JSON…". No chain-of-thought, no analysis, no commentary. The first character of your response MUST be `{{`.
+
 {{
   "name": "ARCHETYPE NAME",
   "descriptors": ["term1", "term2", "term3", "term4", "term5", "term6", "term7", "term8", "term9", "term10"],
@@ -2128,17 +2130,17 @@ Output JSON only:
 }}"""
 
         messages = [
-            {"role": "system", "content": "You are creating symbolic archetypes grounded in source material. Output valid JSON only."},
+            {"role": "system", "content": "You output ONLY a JSON object. Never any preamble, explanation, or chain-of-thought. The first character of every response is `{`."},
             {"role": "user", "content": prompt}
         ]
         
-        # 1500 tokens gives headroom for: name + 10 scholarly/rare descriptors
-        # + essence sentence + JSON whitespace + any model preamble. 512 was
-        # too tight and caused silent mid-JSON truncation for most archetypes.
+        # 3000 tokens: enough headroom for models that emit visible chain-of-
+        # thought (Kimi K2.6, QwQ) plus the actual JSON output afterwards.
+        # Real JSON payload is ~300-500 tokens; the rest is for any preamble.
         if self.backend == "cloudflare":
-            response = self._call_cloudflare(messages, max_tokens=1500)
+            response = self._call_cloudflare(messages, max_tokens=3000)
         else:
-            response = self._call_local(messages, max_tokens=1500)
+            response = self._call_local(messages, max_tokens=3000)
 
         return self._parse_single_archetype(response)
 
