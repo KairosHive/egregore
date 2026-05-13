@@ -1827,9 +1827,19 @@ CRITICAL RULES:
             if _cf_gateway_token:
                 headers["cf-aig-authorization"] = f"Bearer {_cf_gateway_token}"
 
+        # reasoning_effort=low: suppress thinking on reasoning-capable models
+        # (Gemma 4, QwQ, o-series). No-op on non-reasoning models.
+        # Without this, Gemma 4 26B A4B can spend the entire token budget on
+        # internal reasoning and return an empty visible response.
+        payload = {
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temp,
+            "reasoning_effort": "low",
+        }
         response = requests.post(
             url,
-            json={"messages": messages, "max_tokens": max_tokens, "temperature": temp},
+            json=payload,
             headers=headers,
             timeout=120
         )
@@ -1841,27 +1851,59 @@ CRITICAL RULES:
 
         result = data.get("result", {}) or {}
 
-        # Native Workers AI shape: result.response
-        content = (result.get("response") or "").strip()
+        def _as_text(value):
+            """Coerce any plausible response shape into a string. Workers AI
+            returns strings for legacy chat models, but newer models (Llama 3.3
+            tool-call shape, Gemma 4 thinking shape) sometimes put text inside
+            a dict or list under varying keys."""
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value.strip()
+            if isinstance(value, dict):
+                for k in ("text", "content", "response", "message", "output_text", "reasoning_content"):
+                    sub = value.get(k)
+                    if sub:
+                        s = _as_text(sub)
+                        if s:
+                            return s
+                return ""
+            if isinstance(value, list) and value:
+                for item in value:
+                    s = _as_text(item)
+                    if s:
+                        return s
+                return ""
+            return ""
+
+        # Native Workers AI shape: result.response (string OR dict for tool models)
+        content = _as_text(result.get("response"))
 
         # OpenAI-compatible shape: result.choices[0].message.content
         # (Gemma 4 / Llama 4 / MoE / thinking models often use this.)
+        finish_reason = None
         if not content:
             choices = result.get("choices") or []
             if choices and isinstance(choices, list):
-                msg = (choices[0] or {}).get("message") or {}
-                content = (msg.get("content") or "").strip()
+                choice0 = choices[0] or {}
+                msg = choice0.get("message") or {}
+                finish_reason = choice0.get("finish_reason")
+                content = _as_text(msg.get("content"))
+                # Last-resort: some reasoning models put visible output in
+                # reasoning_content when content is empty.
+                if not content:
+                    content = _as_text(msg.get("reasoning_content"))
 
         # Thinking-mode models sometimes put visible text in result.output_text
         if not content:
-            content = (result.get("output_text") or "").strip()
+            content = _as_text(result.get("output_text"))
 
         if not content:
             # Diagnostic: what shape did we actually get? Logs the result keys
-            # plus usage (if present) so we can spot empty-response causes.
+            # plus usage and finish_reason so we can spot empty-response causes.
             keys = list(result.keys())
             usage = result.get("usage")
-            print(f"[Refiner] Empty LLM response. result keys={keys} usage={usage} model={self.model}", flush=True)
+            print(f"[Refiner] Empty LLM response. result keys={keys} usage={usage} finish_reason={finish_reason} model={self.model}", flush=True)
 
         return content
 
