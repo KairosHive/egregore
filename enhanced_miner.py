@@ -1874,8 +1874,16 @@ CRITICAL RULES:
                 return ""
             return ""
 
-        # Native Workers AI shape: result.response (string OR dict for tool models)
-        content = _as_text(result.get("response"))
+        # Native Workers AI shape: result.response
+        # - Most models: string containing JSON or prose
+        # - Llama 4 Scout: structured dict already parsed by the API (we
+        #   need to re-serialize so the downstream parser still works)
+        response_value = result.get("response")
+        if isinstance(response_value, dict) and (response_value.get("name") or response_value.get("descriptors")):
+            import json as _json
+            content = _json.dumps(response_value)
+        else:
+            content = _as_text(response_value)
 
         # OpenAI-compatible shape: result.choices[0].message.content
         # (Gemma 4 / Llama 4 / MoE / thinking models often use this.)
