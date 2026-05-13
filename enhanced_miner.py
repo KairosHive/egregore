@@ -1827,24 +1827,20 @@ CRITICAL RULES:
             if _cf_gateway_token:
                 headers["cf-aig-authorization"] = f"Bearer {_cf_gateway_token}"
 
-        # reasoning_effort=low: best-effort to suppress thinking on
-        # reasoning-capable models. Gemma 4 currently ignores it.
-        # response_format=json_object: best-effort to keep the model from
-        # routing the JSON output through tool_calls (which Llama 3.3 70B does
-        # by default when the prompt looks like a function schema).
-        payload = {
+        # reasoning_effort + response_format are best-effort hints. Some models
+        # (e.g. GLM 4.7 Flash) reject unknown params with 400. If that happens,
+        # retry with a minimal payload and log what Cloudflare rejected.
+        base_payload = {
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temp,
-            "reasoning_effort": "low",
-            "response_format": {"type": "json_object"},
         }
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=120
-        )
+        payload = {**base_payload, "reasoning_effort": "low", "response_format": {"type": "json_object"}}
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        if response.status_code == 400:
+            body_preview = (response.text or "")[:300].replace("\n", " ")
+            print(f"[Refiner] 400 from {self.model}; retrying without reasoning_effort/response_format. Body: {body_preview}", flush=True)
+            response = requests.post(url, json=base_payload, headers=headers, timeout=120)
         response.raise_for_status()
         data = response.json()
 
