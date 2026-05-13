@@ -2047,17 +2047,21 @@ Output JSON only:
             {"role": "user", "content": prompt}
         ]
         
+        # 1500 tokens gives headroom for: name + 10 scholarly/rare descriptors
+        # + essence sentence + JSON whitespace + any model preamble. 512 was
+        # too tight and caused silent mid-JSON truncation for most archetypes.
         if self.backend == "cloudflare":
-            response = self._call_cloudflare(messages, max_tokens=512)
+            response = self._call_cloudflare(messages, max_tokens=1500)
         else:
-            response = self._call_local(messages, max_tokens=512)
-        
+            response = self._call_local(messages, max_tokens=1500)
+
         return self._parse_single_archetype(response)
-    
+
     def _parse_single_archetype(self, response: str) -> Dict:
         """Parse a single archetype response."""
+        raw = response  # keep for diagnostics
         response = response.strip()
-        
+
         # Handle markdown
         if "```json" in response:
             match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
@@ -2067,16 +2071,33 @@ Output JSON only:
             match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
             if match:
                 response = match.group(1)
-        
+
         start = response.find('{')
         end = response.rfind('}') + 1
         if start >= 0 and end > start:
             response = response[start:end]
-        
+
         try:
-            data = json.loads(response)
+            return json.loads(response)
+        except json.JSONDecodeError:
+            pass
+
+        # Salvage attempt: trailing commas, then close unbalanced braces/brackets.
+        salvaged = re.sub(r',\s*}', '}', response)
+        salvaged = re.sub(r',\s*]', ']', salvaged)
+        open_braces = salvaged.count('{') - salvaged.count('}')
+        open_brackets = salvaged.count('[') - salvaged.count(']')
+        if open_brackets > 0:
+            salvaged += ']' * open_brackets
+        if open_braces > 0:
+            salvaged += '}' * open_braces
+        try:
+            data = json.loads(salvaged)
+            print(f"[Refiner] Recovered truncated JSON (len={len(raw)})", flush=True)
             return data
-        except:
+        except json.JSONDecodeError as e:
+            preview = raw[:200].replace("\n", " ")
+            print(f"[Refiner] JSON parse failed ({e}); response preview: {preview!r}", flush=True)
             return {}
     
     def _deduplicate_descriptors(self, archetypes: Dict[str, List[str]]) -> Dict[str, List[str]]:
