@@ -1710,7 +1710,7 @@ class LLMArchetypeRefiner:
     def __init__(
         self,
         backend: Literal["cloudflare", "local"] = "cloudflare",
-        model: str = "@cf/google/gemma-4-26b-a4b-it",
+        model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
         cloudflare_account_id: Optional[str] = None,
         cloudflare_api_token: Optional[str] = None,
         local_model_loader: Optional[Callable] = None,
@@ -1827,15 +1827,17 @@ CRITICAL RULES:
             if _cf_gateway_token:
                 headers["cf-aig-authorization"] = f"Bearer {_cf_gateway_token}"
 
-        # reasoning_effort=low: suppress thinking on reasoning-capable models
-        # (Gemma 4, QwQ, o-series). No-op on non-reasoning models.
-        # Without this, Gemma 4 26B A4B can spend the entire token budget on
-        # internal reasoning and return an empty visible response.
+        # reasoning_effort=low: best-effort to suppress thinking on
+        # reasoning-capable models. Gemma 4 currently ignores it.
+        # response_format=json_object: best-effort to keep the model from
+        # routing the JSON output through tool_calls (which Llama 3.3 70B does
+        # by default when the prompt looks like a function schema).
         payload = {
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temp,
             "reasoning_effort": "low",
+            "response_format": {"type": "json_object"},
         }
         response = requests.post(
             url,
@@ -1897,6 +1899,27 @@ CRITICAL RULES:
         # Thinking-mode models sometimes put visible text in result.output_text
         if not content:
             content = _as_text(result.get("output_text"))
+
+        # Tool-call envelope: Llama 3.3 70B (and other instruct/tool models)
+        # often route schema-shaped output through tool_calls instead of text.
+        # The JSON we want is in tool_calls[*].function.arguments (a JSON
+        # string). Also check choices[0].message.tool_calls for the OpenAI shape.
+        if not content:
+            tool_calls = result.get("tool_calls") or []
+            if not tool_calls:
+                choices = result.get("choices") or []
+                if choices and isinstance(choices, list):
+                    tool_calls = ((choices[0] or {}).get("message") or {}).get("tool_calls") or []
+            if tool_calls and isinstance(tool_calls, list):
+                for tc in tool_calls:
+                    if not isinstance(tc, dict):
+                        continue
+                    fn = tc.get("function") or {}
+                    args = fn.get("arguments") if isinstance(fn, dict) else None
+                    candidate = _as_text(args) or _as_text(tc.get("arguments")) or _as_text(tc.get("input"))
+                    if candidate:
+                        content = candidate
+                        break
 
         if not content:
             # Diagnostic: what shape did we actually get? Logs the result keys

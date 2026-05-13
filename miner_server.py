@@ -1190,7 +1190,7 @@ async def run_mining_pipeline(session: MinerState, job_id: str, config: Dict):
         if config.get("use_llm", True):
             llm_refiner = LLMArchetypeRefiner(
                 backend="cloudflare",
-                model=config.get("llm_model", "@cf/google/gemma-4-26b-a4b-it"),
+                model=config.get("llm_model", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
                 output_language=config.get("output_language", "english"),
                 temperature=config.get("temperature", 0.7)
             )
