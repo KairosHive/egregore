@@ -1835,12 +1835,36 @@ CRITICAL RULES:
         )
         response.raise_for_status()
         data = response.json()
-        
+
         if not data.get("success"):
             raise RuntimeError(f"Cloudflare API error: {data.get('errors', [])}")
-        
-        return data.get("result", {}).get("response", "").strip()
-    
+
+        result = data.get("result", {}) or {}
+
+        # Native Workers AI shape: result.response
+        content = (result.get("response") or "").strip()
+
+        # OpenAI-compatible shape: result.choices[0].message.content
+        # (Gemma 4 / Llama 4 / MoE / thinking models often use this.)
+        if not content:
+            choices = result.get("choices") or []
+            if choices and isinstance(choices, list):
+                msg = (choices[0] or {}).get("message") or {}
+                content = (msg.get("content") or "").strip()
+
+        # Thinking-mode models sometimes put visible text in result.output_text
+        if not content:
+            content = (result.get("output_text") or "").strip()
+
+        if not content:
+            # Diagnostic: what shape did we actually get? Logs the result keys
+            # plus usage (if present) so we can spot empty-response causes.
+            keys = list(result.keys())
+            usage = result.get("usage")
+            print(f"[Refiner] Empty LLM response. result keys={keys} usage={usage} model={self.model}", flush=True)
+
+        return content
+
     def _call_local(self, messages: List[Dict], max_tokens: int = 2048, temperature: Optional[float] = None) -> str:
         """Call local model (requires loader function)."""
         if self.local_loader is None:
