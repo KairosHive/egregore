@@ -2721,11 +2721,9 @@
                             <label class="input-label">LLM Model</label>
                             <div style="display: flex; gap: 0.5rem; align-items: center;">
                                 <select id="llmModel" style="flex: 1;" onchange="document.getElementById('llmModelCustomWrap').style.display = this.value === '__custom__' ? 'block' : 'none';">
-                                    <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B Fast (default — reliable JSON)</option>
-                                    <option value="@cf/zai-org/glm-4.7-flash">GLM 4.7 Flash (cheap, multilingual)</option>
-                                    <option value="@cf/moonshotai/kimi-k2.6">Kimi K2.6 (long-form, 262k ctx)</option>
-                                    <option value="@cf/qwen/qwen3-30b-a3b-fp8">Qwen3 30B A3B (reasoning — may be unreliable for JSON)</option>
-                                    <option value="@cf/qwen/qwq-32b">QwQ 32B (reasoning — may be unreliable for JSON)</option>
+                                    <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B Fast (default — premium, reliable JSON)</option>
+                                    <option value="@cf/meta/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (cheap MoE, vision)</option>
+                                    <option value="@cf/mistralai/mistral-small-3.1-24b-instruct">Mistral Small 3.1 24B (multilingual)</option>
                                     <option value="__custom__">Custom (specify below)…</option>
                                 </select>
                                 <div style="display: flex; align-items: center; gap: 0.25rem;">
