@@ -1918,11 +1918,15 @@ CRITICAL RULES:
                         break
 
         if not content:
-            # Diagnostic: what shape did we actually get? Logs the result keys
-            # plus usage and finish_reason so we can spot empty-response causes.
-            keys = list(result.keys())
-            usage = result.get("usage")
-            print(f"[Refiner] Empty LLM response. result keys={keys} usage={usage} finish_reason={finish_reason} model={self.model}", flush=True)
+            # Diagnostic: dump enough of result that we can see the actual
+            # response shape (which fields hold the model's output, what's
+            # inside tool_calls, etc.). Truncated to keep logs readable.
+            import json as _json
+            try:
+                shape_dump = _json.dumps(result, default=str)[:2000]
+            except Exception:
+                shape_dump = repr(result)[:2000]
+            print(f"[Refiner] Empty LLM response. model={self.model} finish_reason={finish_reason} result={shape_dump}", flush=True)
 
         return content
 
