@@ -1727,16 +1727,14 @@ class LLMArchetypeRefiner:
     
     def _get_language_instruction(self, semantic_spread: float = 0.5) -> str:
         """Get the language instruction to append to prompts.
-        
+
         semantic_spread: 0=focused, 1=divergent - affects naming style
         """
         lang = self.SUPPORTED_LANGUAGES.get(self.output_language, "English")
-        if lang == "English":
-            return ""  # No instruction needed for English
-        
-        # Determine mode based on semantic spread
+
+        # Determine mode based on semantic spread — applies to ALL output languages
+        # (English included; previously English bypassed this entirely).
         if semantic_spread < 0.3:
-            mode = "focused"
             style_guidance = f"""
 STYLE FOCALISÉ / FOCUSED STYLE:
 - Archetype names: 1 word preferred, 2 words maximum
@@ -1745,7 +1743,6 @@ STYLE FOCALISÉ / FOCUSED STYLE:
 - The name must emerge FROM the corpus themes, not be imposed upon them
 - Vocabulary: literary but accessible - words a cultured reader would know"""
         elif semantic_spread < 0.7:
-            mode = "balanced"
             style_guidance = f"""
 STYLE ÉQUILIBRÉ / BALANCED STYLE - SOPHISTICATED VOCABULARY REQUIRED:
 - Archetype names: 1-2 words with deep etymological roots
@@ -1756,7 +1753,6 @@ STYLE ÉQUILIBRÉ / BALANCED STYLE - SOPHISTICATED VOCABULARY REQUIRED:
 - FORBIDDEN: everyday words, simple nouns, common adjectives
 - If a 12-year-old would easily understand the word, it is TOO SIMPLE - find a rarer synonym"""
         else:
-            mode = "divergent"
             style_guidance = f"""
 STYLE DIVERGENT / DIVERGENT STYLE - MAXIMALLY RARE VOCABULARY:
 - Archetype names: 1-2 words, cryptic, archaic, or neologistic
@@ -1766,7 +1762,24 @@ STYLE DIVERGENT / DIVERGENT STYLE - MAXIMALLY RARE VOCABULARY:
 - The stranger and more unfamiliar the word, the BETTER
 - Create compound words or resurrect archaic terms if needed
 - If the word appears in everyday conversation, it is WRONG"""
-        
+
+        if lang == "English":
+            # English: apply style guidance + vocab quality, but skip the
+            # "translate to {lang} / do NOT use English words" directive.
+            return f"""\n\n{style_guidance}
+
+VOCABULARY QUALITY - ABSOLUTELY CRITICAL:
+- You MUST use sophisticated, literary, or technical English vocabulary
+- USE: technical terms, Latin/Greek derivatives, archaic vocabulary, scientific nomenclature, literary archaisms, neologisms from classical roots
+- Every descriptor should require a dictionary lookup for most readers
+
+CRITICAL RULES:
+- Archetype names: 1-2 words MAXIMUM
+- No articles (the, a, an)
+- No phrases or compound titles
+- Names must connect to source corpus themes
+- DESCRIPTORS: Only nouns, adjectives, or verbs. NO prepositions (of/in/for/at/to/from). NO pronouns. NO articles. Each descriptor must be a single meaningful word."""
+
         return f"""\n\nOUTPUT LANGUAGE: Generate ALL archetype names and descriptors in {lang}.
 Exploit the full etymological richness of {lang}. Do NOT use English words.
 The JSON keys ("name", "descriptors", "essence", "archetypes") must remain in English, but all VALUES must be in {lang}.
